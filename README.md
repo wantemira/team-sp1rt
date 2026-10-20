@@ -22,6 +22,11 @@ app/
             ├ handler.py
  └ tests/
  
+  PYTHON POSTGRESQL SQL
+ 
 /frontend
     /cabinet-client
     /cabinet-manager
+    -- REACT-vite
+
+
