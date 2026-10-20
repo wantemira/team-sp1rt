@@ -1,1 +1,10 @@
 
+# 1. POST /auth/login            → token (client)
+# 2. GET  /products              → выбрать product_id
+# 3. POST /applications          → draft
+# 4. PATCH /applications/{id}    → заполнить сумму/срок/бизнес
+# 5. POST /applications/{id}/submit
+# 6. GET  /applications/{id}/status   (polling) → checking
+# 7. GET  /applications/{id}/status   → approved / rejected / needs_info
+#    ├─ needs_info → PATCH → POST /submit → снова к шагу 6
+#    └─ approved   → POST /applications/{id}/sign
