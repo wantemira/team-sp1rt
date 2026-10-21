@@ -1,6 +1,6 @@
 # team-sp1rt
-![Uploading image.png…]()
 
+```
 app/
  ├ main.py
  ├ api/ german and nikita
@@ -28,5 +28,5 @@ app/
     /cabinet-client
     /cabinet-manager
     -- REACT-vite
-
+```
 

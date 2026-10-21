@@ -1,10 +1,438 @@
+openapi: 3.0.3
+info:
+  title: Alfa Smart Credit API (Application Services)
+  description: API для цифрового кредитного конвейера (Малый и микробизнес).
+  version: 1.0.0
+  contact:
+    name: Герман (Backend Core)
+servers:
+  - url: http://localhost:8000/api/v1
+    description: Локальная разработка
 
-# 1. POST /auth/login            → token (client)
-# 2. GET  /products              → выбрать product_id
-# 3. POST /applications          → draft
-# 4. PATCH /applications/{id}    → заполнить сумму/срок/бизнес
-# 5. POST /applications/{id}/submit
-# 6. GET  /applications/{id}/status   (polling) → checking
-# 7. GET  /applications/{id}/status   → approved / rejected / needs_info
-#    ├─ needs_info → PATCH → POST /submit → снова к шагу 6
-#    └─ approved   → POST /applications/{id}/sign
+tags:
+  - name: Client
+    description: Эндпоинты для клиента (доступны с ролью 'client')
+  - name: Employee
+    description: Эндпоинты для сотрудника банка (доступны с ролью 'employee')
+
+paths:
+  # ==========================================
+  # КЛИЕНТСКИЕ ЭНДПОИНТЫ
+  # ==========================================
+  /applications:
+    post:
+      tags: [Client]
+      summary: Создание и подача кредитной заявки
+      description: Клиент заполняет форму, заявка уходит в обработку.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateApplicationRequest'
+      responses:
+        '201':
+          description: Заявка успешно создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationStatusResponse'
+        '400':
+          description: Ошибка валидации данных
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Не авторизован
+        '422':
+          description: Недостаточно данных для заполнения
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationStatusResponse'
+
+  /applications/{application_id}:
+    get:
+      tags: [Client]
+      summary: Получение статуса заявки
+      description: Клиент проверяет, на какой стадии находится его заявка.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: application_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Текущий статус заявки
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationStatusResponse'
+        '404':
+          description: Заявка не найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /applications/{application_id}/fill:
+    patch:
+      tags: [Client]
+      summary: Дозаполнение данных по заявке
+      description: Используется, если статус заявки - NEEDS_INFO. Клиент досылает недостающие данные.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: application_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Динамический объект с недостающими полями.
+              example:
+                business_data:
+                  revenue_2025: 6000000
+                documents:
+                  charter: "base64_encoded_file"
+      responses:
+        '200':
+          description: Данные приняты, заявка снова в обработке.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationStatusResponse'
+        '400':
+          description: Неверный формат данных
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Заявка не находится в статусе NEEDS_INFO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ==========================================
+  # ЭНДПОИНТЫ СОТРУДНИКА 
+  # ==========================================
+  /employee/applications:
+    get:
+      tags: [Employee]
+      summary: Очередь заявок на ручной разбор
+      description: Сотрудник (Назар) видит заявки, которые попали в MANUAL_REVIEW.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [MANUAL_REVIEW, CHECKING, NEEDS_INFO]
+            default: MANUAL_REVIEW
+      responses:
+        '200':
+          description: Список заявок
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EmployeeApplicationShort'
+        '403':
+          description: Доступ запрещен (нет роли employee)
+
+  /employee/applications/{application_id}:
+    get:
+      tags: [Employee]
+      summary: Карточка заявки (Скрининг + Скоринг)
+      description: Детальная информация для принятия решения сотрудником.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: application_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Полные данные заявки
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeApplicationDetail'
+        '404':
+          description: Заявка не найдена
+
+  /employee/applications/{application_id}/action:
+    post:
+      tags: [Employee]
+      summary: Действие сотрудника по заявке
+      description: Одобрить, отклонить или запросить доп. информацию.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: application_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmployeeActionRequest'
+      responses:
+        '200':
+          description: Действие успешно применено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationStatusResponse'
+        '400':
+          description: Некорректное действие (например, попытка одобрить уже отклоненную заявку)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+# ==========================================
+# СХЕМЫ ДАННЫХ (DTO)
+# ==========================================
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    # --- Запросы ---
+    CreateApplicationRequest:
+      type: object
+      required:
+        - product_type
+        - requested_amount
+        - requested_term_months
+        - business_data
+      properties:
+        product_type:
+          type: string
+          enum: [credit_line, overdraft, term_loan]
+          example: "credit_line"
+        requested_amount:
+          type: number
+          format: double
+          example: 1500000
+        requested_term_months:
+          type: integer
+          example: 12
+        purpose:
+          type: string
+          example: "Пополнение оборотных средств"
+        business_data:
+          type: object
+          properties:
+            inn:
+              type: string
+              example: "7700000000"
+            revenue_last_year:
+              type: number
+              example: 5000000
+            company_age_months:
+              type: integer
+              example: 24
+
+    EmployeeActionRequest:
+      type: object
+      required:
+        - action
+      properties:
+        action:
+          type: string
+          enum: [APPROVE, REJECT, REQUEST_INFO]
+          example: "APPROVE"
+        reason_code:
+          type: string
+          description: Код причины (обязателен для REJECT или REQUEST_INFO)
+          example: "HIGH_DEBT_LOAD"
+        conditions:
+          type: object
+          description: Новые условия (если одобрение с изменениями)
+          properties:
+            approved_amount:
+              type: number
+              example: 1000000
+            approved_rate:
+              type: number
+              example: 15.5
+        comment:
+          type: string
+          example: "Снизили лимит из-за долговой нагрузки"
+
+    # --- Ответы ---
+    ApplicationStatusResponse:
+      type: object
+      properties:
+        application_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [DRAFT, CHECKING, NEEDS_INFO, MANUAL_REVIEW, APPROVED, REJECTED]
+          example: "CHECKING"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        missing_fields:
+          type: array
+          items:
+            type: string
+          description: Список полей, которых не хватает (если статус NEEDS_INFO)
+          example: ["business_data.revenue_2025", "documents.charter"]
+        decision:
+          type: object
+          nullable: true
+          properties:
+            approved_amount:
+              type: number
+              example: 1000000
+            approved_rate:
+              type: number
+              example: 15.5
+            reason_code:
+              type: string
+              example: "APPROVED_STANDARD"
+
+    # --- Для сотрудника (Скрининг) ---
+    EmployeeApplicationShort:
+      type: object
+      properties:
+        application_id:
+          type: string
+          format: uuid
+        client_name:
+          type: string
+          example: "ООО Ромашка"
+        requested_amount:
+          type: number
+          example: 1500000
+        risk_grade:
+          type: string
+          example: "C"
+        status:
+          type: string
+          example: "MANUAL_REVIEW"
+        created_at:
+          type: string
+          format: date-time
+
+    EmployeeApplicationDetail:
+      type: object
+      properties:
+        application_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          example: "MANUAL_REVIEW"
+        client_data:
+          type: object
+          properties:
+            inn:
+              type: string
+            company_name:
+              type: string
+            revenue:
+              type: number
+        checks:
+          type: object
+          description: Результаты моков ФНС и БКИ
+          properties:
+            fns_status:
+              type: string
+              enum: [SUCCESS, TIMEOUT, ERROR]
+            bki_status:
+              type: string
+              enum: [SUCCESS, TIMEOUT, ERROR]
+            has_delays:
+              type: boolean
+              description: Есть ли просрочки в БКИ
+            existing_debt:
+              type: number
+        scoring:
+          $ref: '#/components/schemas/ScoringResult'
+        status_history:
+          type: array
+          items:
+            type: object
+            properties:
+              from_status:
+                type: string
+              to_status:
+                type: string
+              changed_at:
+                type: string
+                format: date-time
+              comment:
+                type: string
+
+    ScoringResult:
+      type: object
+      properties:
+        score:
+          type: integer
+          example: 45
+        risk_grade:
+          type: string
+          enum: [A, B, C, D, E]
+          example: "C"
+        reasons:
+          type: array
+          items:
+            type: string
+          example: ["high_debt_load", "short_company_age"]
+        hard_stop_triggered:
+          type: boolean
+          example: false
+        hard_stop_reason:
+          type: string
+          nullable: true
+          example: "COMPANY_AGE_TOO_SHORT"
+
+    # --- Общие ---
+    ErrorResponse:
+      type: object
+      properties:
+        error_code:
+          type: string
+          example: "VALIDATION_ERROR"
+        message:
+          type: string
+          example: "Поле 'requested_amount' должно быть больше нуля."
+        details:
+          type: object
+          nullable: true
