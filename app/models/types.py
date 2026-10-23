@@ -1,0 +1,11 @@
+CLIENT_ROLE = "client"
+EMPLOYEE_ROLE = "employee"
+
+APPLICATION_STATUSES = {
+    "DRAFT",
+    "CHECKING",
+    "NEEDS_INFO",
+    "MANUAL_REVIEW",
+    "APPROVED",
+    "REJECTED",
+}

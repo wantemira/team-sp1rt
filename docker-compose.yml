@@ -1,0 +1,36 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: credit
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: credit
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U credit -d credit"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    environment:
+      DATABASE_URL: postgresql+psycopg2://credit:${POSTGRES_PASSWORD}@db:5432/credit
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      SEED_TEST_USERS: "true"
+      TEST_USERS_PASSWORD: ${TEST_USERS_PASSWORD:?Set TEST_USERS_PASSWORD in .env}
+      UPLOAD_DIR: /app/storage/uploads
+    ports:
+      - "8000:8000"
+    volumes:
+      - uploaded_documents:/app/storage/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  uploaded_documents:

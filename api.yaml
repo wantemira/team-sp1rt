@@ -1,4 +1,5 @@
 
+<<<<<<< Updated upstream
 # 1. POST /auth/login            → token (client)
 # 2. GET  /products              → выбрать product_id
 # 3. POST /applications          → draft
@@ -8,3 +9,882 @@
 # 7. GET  /applications/{id}/status   → approved / rejected / needs_info
 #    ├─ needs_info → PATCH → POST /submit → снова к шагу 6
 #    └─ approved   → POST /applications/{id}/sign
+=======
+tags:
+  - name: Auth
+    description: Вход и данные текущего пользователя
+  - name: Client
+    description: Эндпоинты для клиента (доступны с ролью 'client')
+  - name: Employee
+    description: Эндпоинты для сотрудника банка (доступны с ролью 'employee')
+
+paths:
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Вход по email и паролю
+      description: Возвращает JWT и профиль пользователя с ролью из users.role.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Успешная аутентификация
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Неверные учётные данные
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Для пользователя отсутствует связанный профиль клиента или сотрудника
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Текущий пользователь и профиль
+      description: Возвращает user и связанный профиль client или employee из проверенного JWT.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Текущий пользователь
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthenticatedUserResponse'
+        '401':
+          description: Токен отсутствует, недействителен или просрочен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ==========================================
+  # КЛИЕНТСКИЕ ЭНДПОИНТЫ
+  # ==========================================
+  /applications:
+    post:
+      tags: [Client]
+      summary: Создание и подача кредитной заявки
+      description: >-
+        Клиент заполняет форму, заявка уходит в обработку. client_id определяется
+        по профилю clients, связанному с users.id из проверенного JWT.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateApplicationRequest'
+      responses:
+        '201':
+          description: Заявка успешно создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationStatusResponse'
+        '401':
+          description: Не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Токен действителен, но пользователь не является клиентом
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Ошибка проверки входных данных
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /applications/{id}:
+    get:
+      tags: [Client]
+      summary: Получение статуса заявки
+      description: >-
+        Клиент проверяет статус только своей заявки. Чужая или отсутствующая
+        заявка возвращает 404.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '401':
+          description: Токен отсутствует, недействителен или просрочен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Пользователь не является клиентом
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '200':
+          description: Текущий статус заявки
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationStatusResponse'
+        '404':
+          description: Заявка не найдена или недоступна текущему клиенту
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /applications/{id}/fill:
+    patch:
+      tags: [Client]
+      summary: Дозаполнение данных по заявке
+      description: >-
+        Используется, если статус заявки - NEEDS_INFO. Клиент может менять только
+        свою заявку. Бизнес-данные сохраняются в applications.business_data,
+        документы — в application_documents.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FillApplicationRequest'
+      responses:
+        '401':
+          description: Токен отсутствует, недействителен или просрочен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Пользователь не является владельцем заявки или не является клиентом
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '200':
+          description: Данные приняты, заявка снова в обработке.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationStatusResponse'
+        '400':
+          description: Бизнес-ошибка при обработке заявки
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Ошибка проверки входных данных
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Заявка не находится в статусе NEEDS_INFO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /applications/{id}/documents:
+    post:
+      tags: [Client]
+      summary: Загрузка документа к заявке
+      description: >-
+        Клиент загружает файл как multipart/form-data. Сервер сохраняет файл
+        во внешнем хранилище, а application_documents.file_url и метаданные —
+        в БД. Клиент не задаёт file_url или status.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Идентификатор собственной заявки из applications.id.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/UploadApplicationDocumentRequest'
+      responses:
+        '201':
+          description: Файл сохранён и привязан к заявке
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationDocument'
+        '401':
+          description: Токен отсутствует, недействителен или просрочен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Пользователь не является владельцем заявки или не является клиентом
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Заявка не найдена или недоступна текущему клиенту
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Заявка закрыта отказом и больше не принимает документы
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Файл превышает допустимый размер
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Ошибка проверки multipart/form-data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /applications/{id}/documents/{document_id}/file:
+    get:
+      tags: [Client]
+      summary: Скачивание документа по заявке
+      description: Файл доступен владельцу заявки и сотруднику банка; путь к файлу берётся только из хранилища сервера.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Идентификатор заявки из applications.id.
+        - name: document_id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Идентификатор документа из application_documents.id.
+      responses:
+        '200':
+          description: Бинарное содержимое файла
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '401':
+          description: Токен отсутствует, недействителен или просрочен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Пользователь не владелец заявки и не сотрудник
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Заявка, документ или файл не найдены
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ==========================================
+  # ЭНДПОИНТЫ СОТРУДНИКА 
+  # ==========================================
+  /employee/applications:
+    get:
+      tags: [Employee]
+      summary: Очередь заявок на ручной разбор
+      description: Доступна только пользователям с users.role = employee.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [MANUAL_REVIEW, CHECKING, NEEDS_INFO]
+            default: MANUAL_REVIEW
+      responses:
+        '401':
+          description: Токен отсутствует, недействителен или просрочен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '200':
+          description: Список заявок
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EmployeeApplicationShort'
+        '403':
+          description: Доступ запрещён (нет роли employee)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /employee/applications/{id}:
+    get:
+      tags: [Employee]
+      summary: Карточка заявки (Скрининг + Скоринг)
+      description: Доступна только пользователям с users.role = employee.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '401':
+          description: Токен отсутствует, недействителен или просрочен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Пользователь не является сотрудником
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '200':
+          description: Полные данные заявки
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeApplicationDetail'
+        '404':
+          description: Заявка не найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /employee/applications/{id}/action:
+    post:
+      tags: [Employee]
+      summary: Действие сотрудника по заявке
+      description: >-
+        Доступна только пользователям с users.role = employee. changed_by
+        в application_status_history определяется сервером из авторизованного пользователя.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmployeeActionRequest'
+      responses:
+        '401':
+          description: Токен отсутствует, недействителен или просрочен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Пользователь не является сотрудником
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '200':
+          description: Действие успешно применено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationStatusResponse'
+        '400':
+          description: Некорректное действие (например, попытка одобрить уже отклоненную заявку)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Заявка не найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+# ==========================================
+# СХЕМЫ ДАННЫХ (DTO)
+# ==========================================
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >-
+        Проверяйте подпись и exp. Claims должны содержать sub (users.id) и role.
+        Клиентские операции проверяют владение заявкой по clients.user_id и
+        applications.client_id; операции сотрудника требуют role=employee.
+
+  schemas:
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+          writeOnly: true
+
+    AuthUser:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Идентификатор из users.id.
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [client, employee]
+
+    ClientProfile:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Идентификатор из clients.id.
+        inn:
+          type: string
+        company_name:
+          type: string
+        client_type:
+          type: string
+          enum: [INDIVIDUAL, LEGAL_ENTITY]
+
+    EmployeeProfile:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Идентификатор из employees.id.
+        full_name:
+          type: string
+        position:
+          type: string
+
+    LoginResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: JWT; claims include sub (users.id), role and exp.
+        token_type:
+          type: string
+          enum: [Bearer]
+        expires_in:
+          type: integer
+          description: Срок действия access_token в секундах.
+        user:
+          $ref: '#/components/schemas/AuthUser'
+        client:
+          allOf:
+            - $ref: '#/components/schemas/ClientProfile'
+          type: object
+          nullable: true
+        employee:
+          allOf:
+            - $ref: '#/components/schemas/EmployeeProfile'
+          type: object
+          nullable: true
+
+    AuthenticatedUserResponse:
+      type: object
+      properties:
+        user:
+          $ref: '#/components/schemas/AuthUser'
+        client:
+          allOf:
+            - $ref: '#/components/schemas/ClientProfile'
+          type: object
+          nullable: true
+        employee:
+          allOf:
+            - $ref: '#/components/schemas/EmployeeProfile'
+          type: object
+          nullable: true
+
+    CreateApplicationRequest:
+      type: object
+      required:
+        - product_type
+        - requested_amount
+        - requested_term_months
+        - business_data
+      description: ИНН и название компании берутся из профиля clients, а не из business_data заявки.
+      properties:
+        product_type:
+          type: string
+          enum: [credit_line, overdraft, term_loan]
+          example: "credit_line"
+        requested_amount:
+          type: number
+          format: double
+          example: 1500000
+        requested_term_months:
+          type: integer
+          example: 12
+        purpose:
+          type: string
+          nullable: true
+          example: "Пополнение оборотных средств"
+        business_data:
+          type: object
+          description: >-
+            Дополнительные финансовые и бизнес-сведения, введённые клиентом,
+            сохраняемые в applications.business_data. Сведения, полученные
+            сервером из ФНС, ЕГРЮЛ, ЕГРИП или БКИ, записываются в
+            application_checks.response_data.
+          additionalProperties: true
+          example:
+            financials:
+              annual_revenue: 5000000
+              monthly_expenses: 300000
+            existing_obligations: []
+
+    FillApplicationRequest:
+      type: object
+      required: [business_data]
+      properties:
+        business_data:
+          type: object
+          minProperties: 1
+          description: Обязательные непустые дополняемые данные, сохраняемые в applications.business_data.
+          additionalProperties: true
+
+    UploadApplicationDocumentRequest:
+      type: object
+      required:
+        - document_type
+        - file
+      properties:
+        document_type:
+          type: string
+          example: charter
+          description: Тип загружаемого документа.
+        file:
+          type: string
+          format: binary
+          description: Файл; сохраняется вне БД, а ссылка записывается в application_documents.file_url.
+
+    EmployeeActionRequest:
+      type: object
+      required:
+        - action
+      properties:
+        action:
+          type: string
+          enum: [APPROVE, REJECT, REQUEST_INFO]
+          example: "APPROVE"
+        decision_reason_code:
+          type: string
+          nullable: true
+          description: Сохраняется в applications.decision_reason_code; обязателен для REJECT или REQUEST_INFO.
+          example: "HIGH_DEBT_LOAD"
+        approved_amount:
+          type: number
+          nullable: true
+          description: Сохраняется в applications.approved_amount.
+          example: 1000000
+        approved_rate:
+          type: number
+          nullable: true
+          description: Сохраняется в applications.approved_rate.
+          example: 15.5
+        comment:
+          type: string
+          example: "Снизили лимит из-за долговой нагрузки"
+
+    ApplicationStatusResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Идентификатор из applications.id.
+        product_type:
+          type: string
+          enum: [credit_line, overdraft, term_loan]
+        requested_amount:
+          type: number
+        requested_term_months:
+          type: integer
+        purpose:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [DRAFT, CHECKING, NEEDS_INFO, MANUAL_REVIEW, APPROVED, REJECTED]
+          example: "CHECKING"
+        business_data:
+          type: object
+          additionalProperties: true
+        score:
+          type: integer
+          nullable: true
+        risk_grade:
+          type: string
+          enum: [A, B, C, D, E]
+          nullable: true
+        decision_reason_code:
+          type: string
+          nullable: true
+        approved_amount:
+          type: number
+          nullable: true
+        approved_rate:
+          type: number
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        documents:
+          type: array
+          description: Документы этой заявки и их статус обработки.
+          items:
+            $ref: '#/components/schemas/ApplicationDocument'
+        status_history:
+          type: array
+          description: >-
+            История изменений из application_status_history. comment последнего
+            перехода содержит пояснение или запрос дополнительной информации.
+          items:
+            $ref: '#/components/schemas/ApplicationStatusHistoryEntry'
+
+    EmployeeApplicationShort:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Идентификатор из applications.id.
+        company_name:
+          type: string
+          example: "ООО Ромашка"
+        requested_amount:
+          type: number
+          example: 1500000
+        risk_grade:
+          type: string
+          example: "C"
+          nullable: true
+        status:
+          type: string
+          example: "MANUAL_REVIEW"
+        created_at:
+          type: string
+          format: date-time
+
+    EmployeeApplicationDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Идентификатор из applications.id.
+        status:
+          type: string
+          example: "MANUAL_REVIEW"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        client_id:
+          type: integer
+          description: Внешний ключ из applications.client_id.
+        client:
+          type: object
+          properties:
+            id:
+              type: integer
+              description: Идентификатор из clients.id.
+            inn:
+              type: string
+            company_name:
+              type: string
+            client_type:
+              type: string
+              enum: [INDIVIDUAL, LEGAL_ENTITY]
+        product_type:
+          type: string
+          enum: [credit_line, overdraft, term_loan]
+        requested_amount:
+          type: number
+        requested_term_months:
+          type: integer
+        purpose:
+          type: string
+          nullable: true
+        business_data:
+          type: object
+          additionalProperties: true
+        score:
+          type: integer
+          nullable: true
+        risk_grade:
+          type: string
+          enum: [A, B, C, D, E]
+          nullable: true
+        decision_reason_code:
+          type: string
+          nullable: true
+        approved_amount:
+          type: number
+          nullable: true
+        approved_rate:
+          type: number
+          nullable: true
+        checks:
+          type: array
+          description: Записи application_checks; содержимое response_data зависит от check_type.
+          items:
+            $ref: '#/components/schemas/ApplicationCheck'
+        documents:
+          type: array
+          description: Записи application_documents.
+          items:
+            $ref: '#/components/schemas/ApplicationDocument'
+        status_history:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApplicationStatusHistoryEntry'
+
+    ApplicationCheck:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Идентификатор из application_checks.id.
+        check_type:
+          type: string
+          enum: [FNS, BKI]
+        status:
+          type: string
+          enum: [SUCCESS, TIMEOUT, ERROR]
+        response_data:
+          type: object
+          additionalProperties: true
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    ApplicationDocument:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Идентификатор из application_documents.id.
+        document_type:
+          type: string
+        file_url:
+          type: string
+          format: uri-reference
+        status:
+          type: string
+          enum: [PENDING, VERIFIED, REJECTED]
+        created_at:
+          type: string
+          format: date-time
+
+    ApplicationStatusHistoryEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Идентификатор из application_status_history.id.
+        previous_status:
+          type: string
+          nullable: true
+        new_status:
+          type: string
+        changed_by:
+          type: string
+          enum: [CLIENT, SYSTEM, EMPLOYEE]
+        comment:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    # --- Общие ---
+    ErrorResponse:
+      type: object
+      properties:
+        error_code:
+          type: string
+          example: "VALIDATION_ERROR"
+        message:
+          type: string
+          example: "Поле 'requested_amount' должно быть больше нуля."
+        details:
+          type: object
+          nullable: true
+>>>>>>> Stashed changes
