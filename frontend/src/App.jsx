@@ -6,12 +6,16 @@ import { AppShell } from './components/layout/AppShell';
 import { ComponentsDemo } from './demo/ComponentsDemo';
 import { Card } from './components/ui';
 
-// Импорт страниц клиента
+// Клиентские страницы
 import ClientDashboard from './pages/client/ClientDashBoard';
 import ClientApplications from './pages/client/ClientApplications';
 import ClientApplicationNew from './pages/client/ClientApplicationNew';
 import ClientApplicationDetail from './pages/client/ClientApplicationDetail';
 import ClientProducts from './pages/client/ClientProducts';
+
+// Страницы сотрудника (создадим ниже)
+import EmployeeApplications from './pages/employee/EmployeeApplications';
+import EmployeeApplicationDetail from './pages/employee/EmployeeApplicationDetail';
 
 function ProtectedRoute({ children, allowedRole }) {
   const { user } = useAuth();
@@ -22,59 +26,56 @@ function ProtectedRoute({ children, allowedRole }) {
   return children;
 }
 
-// Заглушка для документов
-function ClientDocuments() {
-  return <Card title="Документы">Здесь будут ваши документы (пока в разработке).</Card>;
-}
-
 function ClientLayout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   
-  // Определяем активный пункт меню по URL
   let activeItem = 'dashboard';
   if (location.pathname.includes('/products')) activeItem = 'application';
   if (location.pathname.includes('/applications')) activeItem = 'applications';
   if (location.pathname.includes('/documents')) activeItem = 'documents';
 
-  // Словарь: как кнопка в меню называется -> куда она ведет
   const pathMap = {
-    'dashboard': '/client',
-    'applications': '/client/applications',
-    'application': '/client/products', // Кнопка "Продукты"
-    'documents': '/client/documents',
+    'dashboard': '/client', 'applications': '/client/applications',
+    'application': '/client/products', 'documents': '/client/documents',
   };
 
   return (
-    <AppShell 
-      role="client" 
-      activeItem={activeItem} 
-      userName={user?.name || user?.email} 
-      onLogout={useAuth().logout}
-      onNavigate={(menuItem) => {
-        // Переводим 'dashboard' в '/client', 'applications' в '/client/applications' и т.д.
-        navigate(pathMap[menuItem] || '/client');
-      }}
-    >
+    <AppShell role="client" activeItem={activeItem} userName={user?.name || user?.email} onLogout={logout} onNavigate={(item) => navigate(pathMap[item] || '/client')}>
       <Routes>
         <Route path="/" element={<ClientDashboard />} />
         <Route path="/products" element={<ClientProducts />} />
         <Route path="/applications" element={<ClientApplications />} />
         <Route path="/applications/new" element={<ClientApplicationNew />} />
         <Route path="/applications/:id" element={<ClientApplicationDetail />} />
-        <Route path="/documents" element={<ClientDocuments />} />
+        <Route path="/documents" element={<Card title="Документы">Раздел в разработке</Card>} />
       </Routes>
     </AppShell>
   );
 }
 
-function EmployeeDashboard() {
+function EmployeeLayout() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const { user, logout } = useAuth();
+  
+  let activeItem = 'queue';
+  if (location.search.includes('status=MANUAL_REVIEW')) activeItem = 'review';
+
+  const pathMap = {
+    'queue': '/employee/applications',
+    'review': '/employee/applications?status=MANUAL_REVIEW',
+    'history': '/employee/applications' // Отдельный архив не нужен по ТЗ
+  };
+
   return (
-    <AppShell role="employee" activeItem="queue" userName={user?.name || user?.email} onLogout={logout} onNavigate={() => {}}>
-      <h1>Кабинет сотрудника</h1>
-      <p>Очередь заявок (в разработке)</p>
+    <AppShell role="employee" activeItem={activeItem} userName={user?.name || user?.email} onLogout={logout} onNavigate={(item) => navigate(pathMap[item] || '/employee/applications')}>
+      <Routes>
+        <Route path="/applications" element={<EmployeeApplications />} />
+        <Route path="/applications/:id" element={<EmployeeApplicationDetail />} />
+        <Route path="*" element={<Navigate to="/employee/applications" replace />} />
+      </Routes>
     </AppShell>
   );
 }
@@ -86,19 +87,8 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           
-          <Route path="/client/*" element={
-            <ProtectedRoute allowedRole="client">
-              <ClientLayout />
-            </ProtectedRoute>
-          } />
-
-          <Route path="/employee/*" element={
-            <ProtectedRoute allowedRole="employee">
-              <Routes>
-                <Route path="/applications" element={<EmployeeDashboard />} />
-              </Routes>
-            </ProtectedRoute>
-          } />
+          <Route path="/client/*" element={<ProtectedRoute allowedRole="client"><ClientLayout /></ProtectedRoute>} />
+          <Route path="/employee/*" element={<ProtectedRoute allowedRole="employee"><EmployeeLayout /></ProtectedRoute>} />
 
           <Route path="/dev" element={<div style={{ padding: 20 }}><ComponentsDemo /></div>} />
           <Route path="/" element={<Navigate to="/login" replace />} />
