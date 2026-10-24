@@ -16,6 +16,9 @@ class ApplicationStatusHistory(Base):
     previous_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
     new_status: Mapped[str] = mapped_column(String(32))
     changed_by: Mapped[str] = mapped_column(String(32))
+    changed_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

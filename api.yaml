@@ -310,9 +310,9 @@ paths:
       tags: [Client]
       summary: Заполнение финансовых данных и повторная оценка
       description: >-
-        Доступно владельцу заявки только в NEEDS_INFO. Дополняет business_data,
-        синхронно повторяет ФНС/БКИ и evaluate_credit и атомарно сохраняет
-        проверки, итог и историю.
+        Доступно владельцу заявки только в NEEDS_INFO. Необходимо заполнить все
+        поля из missing_fields. Дополняет business_data, выполняет полный повтор
+        ФНС/БКИ и evaluate_credit и атомарно сохраняет проверки, итог и историю.
       security:
         - BearerAuth: []
       parameters:
@@ -369,6 +369,11 @@ paths:
     post:
       tags: [Client]
       summary: Подписание и выдача одобренного кредита
+      description: >-
+        Только владелец заявки со статусом APPROVED. Атомарно переводит заявку
+        в ISSUED и записывает signed_at, issued_at и историю. Это имитация
+        подписания и выдачи; реальная ЭП и перевод денег не выполняются. Статуса
+        SIGNED нет.
       security:
         - BearerAuth: []
       parameters:
@@ -613,8 +618,11 @@ paths:
       tags: [Employee]
       summary: Действие сотрудника по заявке
       description: >-
-        Доступна только пользователям с users.role = employee. changed_by
-        в application_status_history определяется сервером из авторизованного пользователя.
+        Доступно только сотрудникам при рассмотрении кредитного риска после
+        успешного завершения обязательных проверок. Для технического сбоя
+        доступен только retry-checks. При APPROVE действуют стоп-факторы,
+        сумма ограничена запрошенной и лимитом продукта, а ставка фиксирована
+        на 28% годовых. ID сотрудника и комментарий сохраняются в истории.
       security:
         - BearerAuth: []
       parameters:
@@ -661,7 +669,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
-          description: Решение доступно только в MANUAL_REVIEW или версия устарела
+          description: Решение недоступно до успешных обязательных проверок, при стоп-факторах, неверном статусе или устаревшей версии
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Некорректные поля действия или сумма одобрения
           content:
             application/json:
               schema:
@@ -672,8 +686,10 @@ paths:
       tags: [Employee]
       summary: Повтор технически неуспешных проверок
       description: >-
-        Доступно в MANUAL_REVIEW только если последняя попытка содержит TIMEOUT/ERROR.
-        Новые проверки, результат, статус и история сохраняются одной транзакцией.
+        Доступно в MANUAL_REVIEW для причины EXTERNAL_CHECK_UNAVAILABLE, если
+        последняя попытка содержит TIMEOUT/ERROR. Новые проверки, результат,
+        статус и история сохраняются одной транзакцией. Повторный сбой оставляет
+        техническую причину и не превращается в кредитный отказ.
       security:
         - BearerAuth: []
       parameters:
@@ -996,6 +1012,10 @@ components:
           nullable: true
           items:
             type: string
+            enum:
+              - business_data.financials.annual_revenue
+              - business_data.financials.annual_expenses
+          description: Обязателен для REQUEST_INFO; сохраняется в applications.missing_fields.
         decision_reason_code:
           type: string
           nullable: true
@@ -1009,8 +1029,8 @@ components:
         approved_rate:
           type: string
           nullable: true
-          description: Сохраняется в applications.approved_rate.
-          example: "15.5"
+          description: Фиксированная ставка 28% годовых; если передана, должна быть равна 28.
+          example: "28"
         comment:
           type: string
           example: "Снизили лимит из-за долговой нагрузки"
@@ -1041,7 +1061,9 @@ components:
         version:
           type: integer
           minimum: 1
-          description: Версия заявки; передавайте её в PATCH, submit и действия сотрудника.
+          description: >-
+            Начинается с 1 и атомарно увеличивается при изменении заявки.
+            Optimistic locking возвращает 409 при устаревшей версии.
         business_data:
           type: object
           properties:
@@ -1056,8 +1078,15 @@ components:
                   nullable: true
         next_actions:
           type: array
+          description: >-
+            Действия, вычисленные для роли текущего пользователя и состояния:
+            клиент DRAFT=[EDIT,SUBMIT], NEEDS_INFO=[FILL], APPROVED=[SIGN];
+            сотрудник MANUAL_REVIEW при кредитном рассмотрении=
+            [APPROVE,REJECT,REQUEST_INFO], при EXTERNAL_CHECK_UNAVAILABLE=
+            [RETRY_CHECKS]; остальные сочетания возвращают пустой список.
           items:
             type: string
+            enum: [EDIT, SUBMIT, FILL, APPROVE, REJECT, REQUEST_INFO, RETRY_CHECKS, SIGN]
         missing_fields:
           type: array
           items:
@@ -1077,12 +1106,30 @@ components:
         decision_reason_code:
           type: string
           nullable: true
+        scoring_result:
+          type: object
+          nullable: true
+          description: >-
+            Полный JSON результата расчета: модель, статус, score, reason_code,
+            входные данные проверок и финансов, факторы принятия решения.
         approved_amount:
           type: string
           nullable: true
         approved_rate:
           type: string
           nullable: true
+          example: "28.0000"
+          description: Сервер фиксирует ставку 28% годовых при ручном одобрении.
+        signed_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Время демонстрационной фиксации подписания.
+        issued_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Время демонстрационной фиксации выдачи вместе с подписанием.
         created_at:
           type: string
           format: date-time
@@ -1143,6 +1190,7 @@ components:
         version:
           type: integer
           minimum: 1
+          description: Начинается с 1; атомарно увеличивается при изменении заявки.
         created_at:
           type: string
           format: date-time
@@ -1191,8 +1239,10 @@ components:
                   nullable: true
         next_actions:
           type: array
+          description: Доступные действия сотрудника для текущего состояния заявки.
           items:
             type: string
+            enum: [EDIT, SUBMIT, FILL, APPROVE, REJECT, REQUEST_INFO, RETRY_CHECKS, SIGN]
         missing_fields:
           type: array
           items:
@@ -1210,11 +1260,23 @@ components:
         decision_reason_code:
           type: string
           nullable: true
+        scoring_result:
+          type: object
+          nullable: true
+          description: Полный JSON результата скоринга с входами и факторами расчета.
         approved_amount:
           type: string
           nullable: true
         approved_rate:
           type: string
+          nullable: true
+        signed_at:
+          type: string
+          format: date-time
+          nullable: true
+        issued_at:
+          type: string
+          format: date-time
           nullable: true
         checks:
           type: array
@@ -1305,6 +1367,10 @@ components:
         changed_by:
           type: string
           enum: [CLIENT, SYSTEM, EMPLOYEE]
+        changed_by_user_id:
+          type: integer
+          nullable: true
+          description: ID пользователя, выполнившего переход; для SYSTEM равен null.
         comment:
           type: string
           nullable: true

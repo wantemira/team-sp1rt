@@ -103,8 +103,10 @@ class EmployeeActionRequest(BaseModel):
     @model_validator(mode="after")
     def validate_action_payload(self):
         if self.action == EmployeeAction.APPROVE:
-            if not self.approved_amount or not self.approved_rate or not self.comment:
-                raise ValueError("Для APPROVE обязательны approved_amount, approved_rate, comment")
+            if self.approved_amount is None or not self.comment:
+                raise ValueError("Для APPROVE обязательны approved_amount и comment")
+            if self.approved_rate is not None and self.approved_rate != Decimal("28"):
+                raise ValueError("Для продукта установлена ставка 28% годовых.")
                 
         elif self.action == EmployeeAction.REJECT:
             if not self.decision_reason_code or not self.comment:
@@ -119,7 +121,10 @@ class EmployeeActionRequest(BaseModel):
                 "business_data.financials.annual_revenue",
                 "business_data.financials.annual_expenses"
             }
-            if not set(self.missing_fields).issubset(allowed_fields):
+            if (
+                len(self.missing_fields) != len(set(self.missing_fields))
+                or not set(self.missing_fields).issubset(allowed_fields)
+            ):
                 raise ValueError(f"missing_fields может содержать только: {allowed_fields}")
                 
         return self
@@ -143,6 +148,7 @@ class ApplicationStatusHistoryResponse(BaseModel):
     previous_status: str | None
     new_status: str
     changed_by: str
+    changed_by_user_id: int | None
     comment: str | None
     created_at: datetime
 
@@ -170,8 +176,11 @@ class ApplicationResponse(BaseModel):
     score: int | None
     risk_grade: str | None
     decision_reason_code: str | None
+    scoring_result: dict[str, Any] | None
     approved_amount: Decimal | None
     approved_rate: Decimal | None
+    signed_at: datetime | None
+    issued_at: datetime | None
     created_at: datetime
     updated_at: datetime
     
@@ -241,6 +250,6 @@ class ApplicationFill(BaseModel):
 
     @model_validator(mode="after")
     def require_financial_information(self) -> "ApplicationFill":
-        if not self.business_data.financials.model_dump(exclude_none=True):
+        if not self.business_data.financials.model_fields_set:
             raise ValueError("At least one financial field must be provided.")
         return self

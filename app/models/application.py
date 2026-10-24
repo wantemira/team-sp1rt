@@ -2,7 +2,17 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Integer, JSON, Numeric, String, func
+from sqlalchemy import (
+    DateTime,
+    ForeignKey,
+    Integer,
+    JSON,
+    Numeric,
+    String,
+    Text,
+    func,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -24,8 +34,25 @@ class Application(Base):
     score: Mapped[int | None] = mapped_column(Integer, nullable=True)
     risk_grade: Mapped[str | None] = mapped_column(String(8), nullable=True)
     decision_reason_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    approved_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
-    approved_rate: Mapped[Decimal | None] = mapped_column(Numeric(8, 4), nullable=True)
+    scoring_result: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, nullable=True
+    )
+    approved_amount: Mapped[Decimal | None] = mapped_column(
+        Numeric(18, 2), nullable=True
+    )
+    approved_rate: Mapped[Decimal | None] = mapped_column(
+        Numeric(8, 4), nullable=True
+    )
+    missing_fields: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list, server_default=text("'[]'")
+    )
+    info_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    signed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    issued_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     version: Mapped[int] = mapped_column(
         Integer, nullable=False, default=1, server_default="1"
     )

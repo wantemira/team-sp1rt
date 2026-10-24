@@ -1,4 +1,6 @@
 import logging
+from datetime import datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +33,12 @@ from app.schemas.applications import (
 from app.services.credit_evaluation import evaluate_credit
 
 logger = logging.getLogger(__name__)
+
+FINANCIAL_FIELD_PATHS = {
+    "business_data.financials.annual_revenue": "annual_revenue",
+    "business_data.financials.annual_expenses": "annual_expenses",
+}
+ANNUAL_INTEREST_RATE = Decimal("28.0000")
 
 
 def _commit(db: Session) -> None:
@@ -101,6 +109,27 @@ def _get_client_application(db: Session, user: User, application_id: int) -> App
     )
     if application is None:
         raise _not_found()
+    return _set_next_actions(application, "client")
+
+
+def _next_actions(application: Application, role: str) -> list[str]:
+    if role == "client":
+        return {
+            "DRAFT": ["EDIT", "SUBMIT"],
+            "NEEDS_INFO": ["FILL"],
+            "APPROVED": ["SIGN"],
+        }.get(application.status, [])
+    if role == "employee" and application.status == "MANUAL_REVIEW":
+        return (
+            ["RETRY_CHECKS"]
+            if application.decision_reason_code == "EXTERNAL_CHECK_UNAVAILABLE"
+            else ["APPROVE", "REJECT", "REQUEST_INFO"]
+        )
+    return []
+
+
+def _set_next_actions(application: Application, role: str) -> Application:
+    application.next_actions = _next_actions(application, role)
     return application
 
 
@@ -116,6 +145,7 @@ def create_application(
         purpose=data.purpose,
         status="DRAFT",
         business_data=_serialize_business_data(data.business_data),
+        version=1,
     )
     db.add(application)
     db.flush()
@@ -125,6 +155,7 @@ def create_application(
             previous_status=None,
             new_status="DRAFT",
             changed_by="CLIENT",
+            changed_by_user_id=user.id,
             comment="Draft created.",
         )
     )
@@ -134,7 +165,12 @@ def create_application(
 
 def get_client_applications(db: Session, user: User) -> list[Application]:
     client = _client_or_forbidden(user)
-    return application_repository.get_client_applications(db, client.id)
+    return [
+        _set_next_actions(application, "client")
+        for application in application_repository.get_client_applications(
+            db, client.id
+        )
+    ]
 
 
 def get_client_application(
@@ -198,6 +234,7 @@ def submit_application(
         db,
         application,
         changed_by="CLIENT",
+        changed_by_user_id=user.id,
         transition_comment="Application submitted for review.",
     )
 
@@ -212,12 +249,35 @@ def fill_application(
             status_code=status.HTTP_409_CONFLICT,
             detail="Only applications that need information can be filled.",
         )
+    requested_fields = set(application.missing_fields or [])
+    provided_fields = data.business_data.financials.model_fields_set
+    financials = data.business_data.financials
+    missing_or_invalid = [
+        path
+        for path, field_name in FINANCIAL_FIELD_PATHS.items()
+        if path in requested_fields
+        and (
+            field_name not in provided_fields
+            or getattr(financials, field_name) is None
+        )
+    ]
+    if not requested_fields or missing_or_invalid:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": "Fill every requested financial field with a valid value.",
+                "missing_fields": missing_or_invalid or sorted(requested_fields),
+            },
+        )
     changes = _serialize_business_data(data.business_data, exclude_unset=True)
     application.business_data = _merge_dict(application.business_data, changes)
+    application.missing_fields = []
+    application.info_comment = None
     return _run_credit_checks(
         db,
         application,
         changed_by="CLIENT",
+        changed_by_user_id=user.id,
         transition_comment="Client provided requested financial information.",
     )
 
@@ -236,10 +296,12 @@ def retry_checks(
             status_code=409,
             detail="Checks can only be retried for applications in MANUAL_REVIEW.",
         )
-    latest_checks: dict[str, ApplicationCheck] = {}
-    for check in application.checks:
-        if check.check_type in {"FNS", "BKI"}:
-            latest_checks[check.check_type] = check
+    if application.decision_reason_code != "EXTERNAL_CHECK_UNAVAILABLE":
+        raise HTTPException(
+            status_code=409,
+            detail="Checks can only be retried after a technical check failure.",
+        )
+    latest_checks = _latest_checks(application)
     if not any(
         check.status in {"TIMEOUT", "ERROR"} for check in latest_checks.values()
     ):
@@ -251,6 +313,7 @@ def retry_checks(
         db,
         application,
         changed_by="EMPLOYEE",
+        changed_by_user_id=employee.id,
         transition_comment="Employee retried unavailable external checks.",
     )
 
@@ -260,6 +323,7 @@ def _run_credit_checks(
     application: Application,
     *,
     changed_by: str,
+    changed_by_user_id: int,
     transition_comment: str,
 ) -> Application:
     previous_status = application.status
@@ -271,6 +335,24 @@ def _run_credit_checks(
         fns_result = fns_mock.get_fns_result(client.inn, fns_attempt_number)
         bki_result = bki_mock.get_bki_result(client.inn)
         evaluation = evaluate_credit(application, fns_result, bki_result)
+        scoring_result = evaluation.scoring_result or {
+            "model": "mvp_demo_thresholds_v1",
+            "status": evaluation.status,
+            "score": evaluation.score,
+            "reason_code": evaluation.reason_code,
+            "inputs": {
+                "financials": application.business_data.get("financials") or {},
+                "fns": {
+                    "status": fns_result.status,
+                    **fns_result.as_response_data(),
+                },
+                "bki": {
+                    "status": bki_result.status,
+                    **bki_result.as_response_data(),
+                },
+            },
+            "decision_factors": {},
+        }
         db.add_all(
             [
                 ApplicationCheck(
@@ -289,14 +371,26 @@ def _run_credit_checks(
         )
         application.status = evaluation.status
         application.score = evaluation.score
-        application.risk_grade = None
         application.decision_reason_code = evaluation.reason_code
+        application.scoring_result = scoring_result
+        if evaluation.status == "NEEDS_INFO":
+            financials = application.business_data.get("financials") or {}
+            application.missing_fields = (
+                ["business_data.financials.annual_revenue"]
+                if not any(value is not None for value in financials.values())
+                else []
+            )
+            application.info_comment = "Provide the requested financial information."
+        else:
+            application.missing_fields = []
+            application.info_comment = None
         db.add(
             ApplicationStatusHistory(
                 application_id=application.id,
                 previous_status=previous_status,
                 new_status="CHECKING",
                 changed_by=changed_by,
+                changed_by_user_id=changed_by_user_id,
                 comment=transition_comment,
             )
         )
@@ -306,6 +400,7 @@ def _run_credit_checks(
                 previous_status="CHECKING",
                 new_status=evaluation.status,
                 changed_by="SYSTEM",
+                changed_by_user_id=None,
                 comment=evaluation.reason_code,
             )
         )
@@ -322,13 +417,13 @@ def _run_credit_checks(
         )
         if updated_application is None:
             raise _not_found()
-        return updated_application
+        return _set_next_actions(updated_application, "client")
     updated_application = application_repository.get_employee_application(
         db, application.id
     )
     if updated_application is None:
         raise _not_found()
-    return updated_application
+    return _set_next_actions(updated_application, "employee")
 
 
 def sign_application(
@@ -342,13 +437,17 @@ def sign_application(
             detail="Only approved applications can be issued.",
         )
     application.status = "ISSUED"
+    issued_at = datetime.now(timezone.utc)
+    application.signed_at = issued_at
+    application.issued_at = issued_at
     db.add(
         ApplicationStatusHistory(
             application_id=application.id,
             previous_status="APPROVED",
             new_status="ISSUED",
             changed_by="CLIENT",
-            comment="Credit agreement signed.",
+            changed_by_user_id=user.id,
+            comment="Demo credit agreement signed and funds issued.",
         )
     )
     _commit(db)
@@ -481,8 +580,13 @@ def get_employee_application(
                     "score",
                     "risk_grade",
                     "decision_reason_code",
+                    "scoring_result",
                     "approved_amount",
                     "approved_rate",
+                    "missing_fields",
+                    "info_comment",
+                    "signed_at",
+                    "issued_at",
                     "created_at",
                     "updated_at",
                     "documents",
@@ -492,6 +596,7 @@ def get_employee_application(
             },
             "client_id": application.client_id,
             "client": application.client,
+            "next_actions": _next_actions(application, "employee"),
         }
     )
 
@@ -513,11 +618,46 @@ def employee_decision(
             status_code=409,
             detail="Employee decisions are only available in MANUAL_REVIEW.",
         )
-    if decision.action.value in {"REJECT", "REQUEST_INFO"} and not decision.decision_reason_code:
+    latest_checks = _latest_checks(application)
+    if (
+        application.decision_reason_code == "EXTERNAL_CHECK_UNAVAILABLE"
+        or not _required_checks_succeeded(latest_checks)
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Employee decisions require all mandatory checks to succeed; "
+                "retry technical failures."
+            ),
+        )
+    if (
+        decision.action.value in {"REJECT", "REQUEST_INFO"}
+        and not decision.decision_reason_code
+    ):
         raise HTTPException(
             status_code=400,
             detail="decision_reason_code is required for REJECT and REQUEST_INFO.",
         )
+    if decision.action.value == "APPROVE":
+        if (
+            application.requested_amount is None
+            or decision.approved_amount is None
+            or decision.approved_amount <= 0
+            or decision.approved_amount > application.requested_amount
+            or decision.approved_amount > Decimal("5000000.00")
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "approved_amount must be positive and no greater than the "
+                    "requested amount or product limit."
+                ),
+            )
+        if _has_known_stop_factor(latest_checks):
+            raise HTTPException(
+                status_code=409,
+                detail="Applications with known stop factors cannot be approved.",
+            )
 
     new_status = {
         "APPROVE": "APPROVED",
@@ -530,7 +670,10 @@ def employee_decision(
         application.decision_reason_code = decision.decision_reason_code
     if decision.action.value == "APPROVE":
         application.approved_amount = decision.approved_amount
-        application.approved_rate = decision.approved_rate
+        application.approved_rate = ANNUAL_INTEREST_RATE
+    elif decision.action.value == "REQUEST_INFO":
+        application.missing_fields = list(decision.missing_fields or [])
+        application.info_comment = decision.comment
 
     db.add(
         ApplicationStatusHistory(
@@ -538,6 +681,7 @@ def employee_decision(
             previous_status=previous_status,
             new_status=new_status,
             changed_by="EMPLOYEE",
+            changed_by_user_id=employee.id,
             comment=decision.comment,
         )
     )
@@ -549,3 +693,42 @@ def employee_decision(
     if updated_application is None:
         raise _not_found()
     return updated_application
+
+
+def _latest_checks(application: Application) -> dict[str, ApplicationCheck]:
+    latest: dict[str, ApplicationCheck] = {}
+    for check in application.checks:
+        if check.check_type in {"FNS", "BKI"}:
+            latest[check.check_type] = check
+    return latest
+
+
+def _required_checks_succeeded(
+    checks: dict[str, ApplicationCheck],
+) -> bool:
+    fns = checks.get("FNS")
+    bki = checks.get("BKI")
+    return bool(
+        fns is not None
+        and bki is not None
+        and fns.status == "SUCCESS"
+        and bki.status == "SUCCESS"
+        and fns.response_data
+        and fns.response_data.get("is_active") is not None
+        and fns.response_data.get("business_age_months") is not None
+        and bki.response_data
+        and bki.response_data.get("current_overdue_days") is not None
+        and bki.response_data.get("monthly_debt_payments") is not None
+    )
+
+
+def _has_known_stop_factor(checks: dict[str, ApplicationCheck]) -> bool:
+    if not _required_checks_succeeded(checks):
+        return True
+    fns = checks["FNS"].response_data or {}
+    bki = checks["BKI"].response_data or {}
+    return bool(
+        fns["is_active"] is not True
+        or fns["business_age_months"] < 12
+        or bki["current_overdue_days"] > 0
+    )

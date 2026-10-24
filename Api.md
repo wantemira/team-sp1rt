@@ -97,7 +97,7 @@
 - `clients` — бизнес-профиль действующего клиента: `id`, `user_id`, `inn`, `company_name`, `client_type`, `created_at`.
 - `employees` — профиль банковского сотрудника: `id`, `user_id`, `full_name`, `position`, `created_at`.
 - Входящий запрос содержит только поля, которые пользователь вводит или изменяет. Связи с пользователем/клиентом, роли, статусы обработки, скоринговые результаты и даты выставляет сервер; идентификаторы внешних ключей нельзя принимать от клиента как доказательство доступа.
-- `applications` — входные параметры заявки (`product_type`, `requested_amount`, `requested_term_months`, `purpose`) и введённые клиентом дополнительные финансовые сведения (`business_data`).
+- `applications` — входные параметры заявки (`product_type`, `requested_amount`, `requested_term_months`, `purpose`), финансовые сведения (`business_data`) и результат расчета (`scoring_result`, полный JSON расчета; параллельно сохраняются `score`, `risk_grade`, `approved_amount`, `approved_rate`).
 - `application_checks` — серверные результаты проверок внешних и внутренних источников (`check_type`, `status`, `response_data`); клиент их не передаёт. Для ФНС в `response_data` хранятся `is_active` (boolean или null) и `business_age_months` (integer или null), для БКИ — `current_overdue_days` (integer или null) и `monthly_debt_payments` (string рублей или null). У каждой попытки проверки создаётся отдельная запись.
 - `application_documents` — метаданные файлов (`document_type`, `file_url`, `status`); сами файлы хранятся во внешнем файловом/объектном хранилище, ссылка на файл сохраняется в БД.
 - `application_status_history` — серверная история смены статусов; сотрудник передаёт `comment` при действии по заявке, а `previous_status`, `new_status`, `changed_by` и `created_at` формирует сервер.
@@ -227,17 +227,28 @@
 
 Ответ `ApplicationResponse` содержит `version` (integer). Передавайте актуальное значение этой версии при следующем изменении заявки или действии сотрудника.
 
+`version` начинается с `1` и атомарно увеличивается при каждом изменении заявки. Обновление использует optimistic locking в БД: если другая операция уже изменила ту же версию, запрос возвращает `409`. `next_actions` рассчитывается сервером для роли текущего пользователя и текущего состояния:
+
+- `DRAFT`, клиент: `EDIT`, `SUBMIT`
+- `NEEDS_INFO`, клиент: `FILL`
+- `MANUAL_REVIEW` после кредитного скоринга, сотрудник: `APPROVE`, `REJECT`, `REQUEST_INFO`
+- `MANUAL_REVIEW` при технической причине, сотрудник: `RETRY_CHECKS`
+- `APPROVED`, клиент: `SIGN`
+- остальные сочетания роли и состояния: пустой список
+
+`scoring_result` в карточке заявки — серверный JSON полного последнего расчета, включая модель, итог, входные финансовые данные и ответы проверок, факторы и причину. Его нельзя передавать в запросах. Поля `score`, `risk_grade`, `approved_amount` и `approved_rate` также сохраняются отдельно.
+
 ### POST `/applications/{id}/fill` — Заполнение запрошенных данных
 
-Доступен владельцу заявки в состоянии `NEEDS_INFO`. Принимает актуальную `version` и финансовые данные. Требуется передать хотя бы одно из полей `annual_revenue` или `annual_expenses`. Сервер дополняет `business_data`, синхронно повторяет ФНС/БКИ и скоринг, сохраняет новый цикл проверок и историю переходов одной транзакцией. Итогом может быть `NEEDS_INFO`, `MANUAL_REVIEW`, `APPROVED` или `REJECTED`.
+Доступен владельцу заявки только в состоянии `NEEDS_INFO`. Принимает актуальную `version` и проверяет, что заполнены все поля из `missing_fields` в карточке заявки. Не передавайте для запрошенного поля `null`: денежные значения должны быть корректными строками рублей. Сервер дополняет `business_data`, очищает выполненный запрос информации, синхронно повторяет ФНС/БКИ и полный расчет; проверки, результат, статус и история сохраняются одной транзакцией. Итогом может быть `NEEDS_INFO`, `MANUAL_REVIEW`, `APPROVED` или `REJECTED`.
 
 **Запрос (`application/json`):**
 
 - `version` (integer) — обязательно
 - `business_data` (object) — обязательно
   - `financials` (object) — обязательно
-    - `annual_revenue` (string или null) — сумма в рублях, необязательно
-    - `annual_expenses` (string или null) — сумма в рублях, необязательно
+    - `annual_revenue` (string или null) — сумма в рублях; обязательна, если указана в `missing_fields`
+    - `annual_expenses` (string или null) — сумма в рублях; обязательна, если указана в `missing_fields`
 
 **Успешный ответ — 200:** обновлённая карточка `ApplicationResponse`.
 
@@ -251,7 +262,7 @@
 
 ### POST `/applications/{id}/sign` — Подписание и выдача
 
-Клиент-владелец может подписать только одобренную заявку (`APPROVED`), передав текущую `version` в query. Сервер переводит её в `ISSUED` и записывает `APPROVED → ISSUED` в историю. В MVP это только изменение статуса: электронная подпись и фактическое перечисление денег не интегрированы.
+Клиент-владелец может подписать только одобренную заявку (`APPROVED`), передав текущую `version` в query. В одной транзакции сервер переводит её в `ISSUED`, записывает время имитации подписания и выдачи (`signed_at`, `issued_at`) и переход `APPROVED → ISSUED` в историю. Это демонстрационная фиксация; реальная электронная подпись и перевод денег не интегрированы. Отдельного статуса `SIGNED` нет.
 
 **Ошибки:** `401` — нет токена; `403` — нет роли клиента; `404` — заявка отсутствует/чужая; `409` — заявка не одобрена или версия устарела.
 
@@ -352,8 +363,15 @@
 - `score` (integer или null)
 - `risk_grade` (string или null; `A`, `B`, `C`, `D` или `E`)
 - `decision_reason_code` (string или null)
+- `scoring_result` (object JSON или null; полный результат расчета с входными данными и факторами)
 - `approved_amount` (string или null; рубли)
 - `approved_rate` (number или null)
+- `signed_at` (string date-time или null; время имитации подписания)
+- `issued_at` (string date-time или null; время имитации выдачи)
+- `missing_fields` (array of string; поля, запрошенные у клиента)
+- `info_comment` (string или null; комментарий к запросу информации)
+- `version` (integer; начальное значение `1`, атомарно увеличивается при каждом изменении)
+- `next_actions` (array of string; зависит от роли и статуса текущего пользователя)
 - `checks` (array of object; записи `application_checks`)
   - `id` (integer, идентификатор `application_checks.id`)
   - `check_type` (string; `FNS` или `BKI`)
@@ -371,6 +389,7 @@
   - `previous_status` (string или null)
   - `new_status` (string)
   - `changed_by` (string; `CLIENT`, `SYSTEM` или `EMPLOYEE`)
+  - `changed_by_user_id` (integer или null; ID пользователя, выполнившего переход, для `SYSTEM` — `null`)
   - `comment` (string или null)
   - `created_at` (string, date-time)
 
@@ -388,14 +407,17 @@
 
 **Запрос (`EmployeeActionRequest`):**
 
-- `action` (string; `APPROVE`, `REJECT` или `REQUEST_INFO`) — обязательно
+- `action` (string; `APPROVE`, `REJECT` или `REQUEST_INFO`) — обязательно; доступно при статусе `MANUAL_REVIEW` после успешных обязательных проверок и только если причина не техническая
 - `version` (integer) — обязательно; версия из последнего ответа по заявке
 - `decision_reason_code` (string) — необязательно; требуется для `REJECT` и `REQUEST_INFO`; сохраняется в `applications.decision_reason_code`
-- `approved_amount` (string, рубли) — необязательно; сохраняется в `applications.approved_amount`
-- `approved_rate` (number) — необязательно; сохраняется в `applications.approved_rate`
+- `missing_fields` (array of string) — обязательно для `REQUEST_INFO`; допустимые значения: `business_data.financials.annual_revenue`, `business_data.financials.annual_expenses`
+- `approved_amount` (string, рубли) — обязательно для `APPROVE`; должна быть положительной, не превышать запрошенную сумму и лимит продукта; сохраняется в `applications.approved_amount`
+- `approved_rate` (number) — необязательно; ставка продукта фиксирована сервером на 28% годовых. Если поле передано, оно должно быть равно `28`; в `applications.approved_rate` сохраняется `28.0000`
 - `comment` (string) — необязательно
 
-Статус и комментарий действия фиксируются в `application_status_history`; `changed_by` определяется сервером по роли пользователя.
+Для `APPROVE` сервер дополнительно требует отсутствие стоп-факторов: активную компанию возрастом не менее 12 месяцев и отсутствие текущей просрочки. Срок одобрения остается равен `requested_term_months`; изменить его решением сотрудника нельзя. Сотрудник не может принять решение до успешного получения обязательных проверок. Для технического сбоя в проверках разрешен только `RETRY_CHECKS`.
+
+Статус, комментарий и ID сотрудника (`changed_by_user_id`) фиксируются в `application_status_history`; `changed_by` определяется сервером по роли пользователя. При `REQUEST_INFO` значения `missing_fields` и `info_comment` сохраняются в карточке заявки.
 
 **Успешный ответ — 200:** `ApplicationStatusResponse` (поля перечислены выше).
 
@@ -404,7 +426,8 @@
 - **401** — токен отсутствует, недействителен или просрочен; тело `ErrorResponse`.
 - **403** — доступ запрещён (нет роли `employee`); тело `ErrorResponse`.
 - **404** — заявка не найдена; тело `ErrorResponse`.
-- **409** — заявка не в `MANUAL_REVIEW` либо версия устарела; тело `ErrorResponse`.
+- **409** — заявка не в `MANUAL_REVIEW`, обязательные проверки не завершены успешно, есть стоп-фактор при одобрении либо версия устарела; тело `ErrorResponse`.
+- **422** — некорректные параметры решения, например сумма одобрения выше запрошенной.
 - **422** — некорректные поля действия; тело `ErrorResponse`:
   - `error_code` (string)
   - `message` (string)
@@ -412,7 +435,7 @@
 
 ### POST `/employee/applications/{id}/retry-checks` — Повтор проверок
 
-Доступен сотруднику только для заявки `MANUAL_REVIEW`, если последняя попытка содержит `TIMEOUT` или `ERROR`. Повтор запускает новые моки ФНС/БКИ и `evaluate_credit` синхронно, добавляет новые записи проверок, результат и переходы статуса в одной транзакции. Число попыток ФНС вычисляется по проверкам именно этой заявки в БД; сценарий `test.client3@example.com` возвращает таймаут при первой проверке ФНС и успех при повторе.
+Доступен сотруднику только для заявки `MANUAL_REVIEW`, когда причина — технический сбой (`EXTERNAL_CHECK_UNAVAILABLE`) и последняя попытка содержит `TIMEOUT` или `ERROR`. Повтор запускает новые моки ФНС/БКИ и полный `evaluate_credit` синхронно, добавляет новые записи проверок, результат и переходы статуса в одной транзакции. Если обязательная проверка снова недоступна, заявка остается в `MANUAL_REVIEW` с технической причиной, а не становится кредитным отказом. Число попыток ФНС вычисляется по проверкам именно этой заявки в БД; сценарий `test.client3@example.com` возвращает таймаут при первой проверке ФНС и успех при повторе.
 
 **Параметры:** `id` (integer; path), `version` (integer; query) — обязательны.
 

@@ -11,6 +11,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.db.base import Base
 from app.db.session import get_db
+from app.integrations.fns_mock import FNSResult
 from app.main import app
 from app.models import (
     Application,
@@ -181,6 +182,7 @@ def test_client_can_create_draft_list_and_read_only_own_applications(
     data = created.json()
     assert data["status"] == "DRAFT"
     assert data["version"] == 1
+    assert data["next_actions"] == ["EDIT", "SUBMIT"]
     assert data["business_data"]["financials"]["annual_revenue"] == "5000000.00"
     assert data["status_history"] == [
         {
@@ -188,6 +190,7 @@ def test_client_can_create_draft_list_and_read_only_own_applications(
             "previous_status": None,
             "new_status": "DRAFT",
             "changed_by": "CLIENT",
+            "changed_by_user_id": data["status_history"][0]["changed_by_user_id"],
             "comment": "Draft created.",
             "created_at": data["status_history"][0]["created_at"],
         }
@@ -320,6 +323,7 @@ def test_draft_can_be_edited_and_submitted_with_version(client: TestClient) -> N
     )
     assert submitted.status_code == 200
     assert submitted.json()["status"] == "NEEDS_INFO"
+    assert submitted.json()["next_actions"] == ["FILL"]
     assert submitted.json()["version"] == 3
     assert [
         (entry["previous_status"], entry["new_status"])
@@ -361,6 +365,7 @@ def test_missing_financial_information_can_be_filled_and_rechecked(
     )
     assert submitted.status_code == 200
     assert submitted.json()["status"] == "NEEDS_INFO"
+    assert submitted.json()["next_actions"] == ["FILL"]
     assert submitted.json()["business_data"] == {"financials": {}}
     assert {check["check_type"] for check in submitted.json()["checks"]} == {
         "FNS",
@@ -381,6 +386,7 @@ def test_missing_financial_information_can_be_filled_and_rechecked(
     )
     assert fill.status_code == 200
     assert fill.json()["status"] == "APPROVED"
+    assert fill.json()["next_actions"] == ["SIGN"]
     assert fill.json()["version"] == submitted.json()["version"] + 1
     assert [
         (entry["previous_status"], entry["new_status"])
@@ -391,6 +397,334 @@ def test_missing_financial_information_can_be_filled_and_rechecked(
         "SUCCESS",
         "SUCCESS",
     ]
+
+
+def test_fill_requires_each_requested_field(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    with TestSession() as db:
+        create_client_user(db)
+        employee, _ = create_employee_user(db)
+        employee_id = employee.id
+
+    monkeypatch.setattr(
+        application_service,
+        "evaluate_credit",
+        lambda *_args, **_kwargs: CreditEvaluation(
+            status="MANUAL_REVIEW",
+            score=65,
+            reason_code="SCORE_REQUIRES_MANUAL_REVIEW",
+        ),
+    )
+    client_token = bearer_token(client)
+    client_headers = {"Authorization": f"Bearer {client_token}"}
+    created = client.post(
+        "/api/v1/applications",
+        json=application_request(),
+        headers=client_headers,
+    )
+    application_id = created.json()["id"]
+    submitted = client.post(
+        f"/api/v1/applications/{application_id}/submit?version=1",
+        headers=client_headers,
+    )
+    assert submitted.json()["status"] == "MANUAL_REVIEW"
+    assert submitted.json()["next_actions"] == []
+
+    employee_token = bearer_token(
+        client, "employee@example.com", "correct horse battery"
+    )
+    employee_headers = {"Authorization": f"Bearer {employee_token}"}
+    employee_card = client.get(
+        f"/api/v1/employee/applications/{application_id}",
+        headers=employee_headers,
+    )
+    assert employee_card.json()["next_actions"] == [
+        "APPROVE",
+        "REJECT",
+        "REQUEST_INFO",
+    ]
+    requested = client.post(
+        f"/api/v1/employee/applications/{application_id}/action",
+        json={
+            "action": "REQUEST_INFO",
+            "version": submitted.json()["version"],
+            "decision_reason_code": "ADDITIONAL_FINANCIALS_REQUIRED",
+            "missing_fields": ["business_data.financials.annual_expenses"],
+            "comment": "Укажите годовые расходы.",
+        },
+        headers=employee_headers,
+    )
+    assert requested.status_code == 200
+    assert requested.json()["missing_fields"] == [
+        "business_data.financials.annual_expenses"
+    ]
+    assert requested.json()["info_comment"] == "Укажите годовые расходы."
+    assert requested.json()["status_history"][-1]["changed_by_user_id"] == employee_id
+
+    fill_path = f"/api/v1/applications/{application_id}/fill"
+    unrequested_only = client.post(
+        fill_path,
+        json={
+            "version": requested.json()["version"],
+            "business_data": {"financials": {"annual_revenue": "7000000.00"}},
+        },
+        headers=client_headers,
+    )
+    assert unrequested_only.status_code == 422
+
+    null_requested_value = client.post(
+        fill_path,
+        json={
+            "version": requested.json()["version"],
+            "business_data": {"financials": {"annual_expenses": None}},
+        },
+        headers=client_headers,
+    )
+    assert null_requested_value.status_code == 422
+
+    filled = client.post(
+        fill_path,
+        json={
+            "version": requested.json()["version"],
+            "business_data": {"financials": {"annual_expenses": "0.00"}},
+        },
+        headers=client_headers,
+    )
+    assert filled.status_code == 200
+    assert filled.json()["status"] == "MANUAL_REVIEW"
+    assert filled.json()["missing_fields"] == []
+    assert filled.json()["info_comment"] is None
+    assert filled.json()["business_data"]["financials"]["annual_expenses"] == "0.00"
+
+
+def test_manual_approval_uses_fixed_rate_and_sign_records_issuance(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with TestSession() as db:
+        create_client_user(db)
+        employee, _ = create_employee_user(db)
+        employee_id = employee.id
+
+    monkeypatch.setattr(
+        application_service,
+        "evaluate_credit",
+        lambda *_args, **_kwargs: CreditEvaluation(
+            status="MANUAL_REVIEW",
+            score=65,
+            reason_code="SCORE_REQUIRES_MANUAL_REVIEW",
+        ),
+    )
+    client_token = bearer_token(client)
+    client_headers = {"Authorization": f"Bearer {client_token}"}
+    created = client.post(
+        "/api/v1/applications",
+        json=application_request(),
+        headers=client_headers,
+    )
+    application_id = created.json()["id"]
+    submitted = client.post(
+        f"/api/v1/applications/{application_id}/submit?version=1",
+        headers=client_headers,
+    )
+    assert submitted.json()["status"] == "MANUAL_REVIEW"
+
+    employee_token = bearer_token(
+        client, "employee@example.com", "correct horse battery"
+    )
+    employee_headers = {"Authorization": f"Bearer {employee_token}"}
+    excessive_amount = client.post(
+        f"/api/v1/employee/applications/{application_id}/action",
+        json={
+            "action": "APPROVE",
+            "version": submitted.json()["version"],
+            "approved_amount": "1500000.01",
+            "comment": "Сумма превышает запрошенную.",
+        },
+        headers=employee_headers,
+    )
+    assert excessive_amount.status_code == 422
+
+    decision = client.post(
+        f"/api/v1/employee/applications/{application_id}/action",
+        json={
+            "action": "APPROVE",
+            "version": submitted.json()["version"],
+            "approved_amount": "1000000.00",
+            "comment": "Проверки успешны, стоп-факторов нет.",
+        },
+        headers=employee_headers,
+    )
+    assert decision.status_code == 200
+    assert decision.json()["status"] == "APPROVED"
+    assert decision.json()["approved_rate"] == "28.0000"
+    assert decision.json()["status_history"][-1]["changed_by_user_id"] == employee_id
+
+    issued = client.post(
+        f"/api/v1/applications/{application_id}/sign"
+        f"?version={decision.json()['version']}",
+        headers=client_headers,
+    )
+    assert issued.status_code == 200
+    assert issued.json()["status"] == "ISSUED"
+    assert issued.json()["signed_at"] is not None
+    assert issued.json()["issued_at"] == issued.json()["signed_at"]
+    assert issued.json()["status_history"][-1]["changed_by"] == "CLIENT"
+    assert issued.json()["next_actions"] == []
+
+    history_count = len(issued.json()["status_history"])
+    signed_at = issued.json()["signed_at"]
+    repeated_sign = client.post(
+        f"/api/v1/applications/{application_id}/sign"
+        f"?version={issued.json()['version']}",
+        headers=client_headers,
+    )
+    assert repeated_sign.status_code == 409
+    latest_card = client.get(
+        f"/api/v1/applications/{application_id}",
+        headers=client_headers,
+    )
+    assert latest_card.json()["status"] == "ISSUED"
+    assert latest_card.json()["signed_at"].removesuffix("Z") == (
+        signed_at.removesuffix("Z")
+    )
+    assert len(latest_card.json()["status_history"]) == history_count
+    assert latest_card.json()["next_actions"] == []
+
+
+def test_technical_check_failure_cannot_be_decided_until_retry(
+    client: TestClient,
+) -> None:
+    with TestSession() as db:
+        seed_test_users(db, "local-test-password")
+        db.commit()
+
+    client_token = bearer_token(
+        client, "test.client3@example.com", "local-test-password"
+    )
+    client_headers = {"Authorization": f"Bearer {client_token}"}
+    created = client.post(
+        "/api/v1/applications",
+        json=application_request(),
+        headers=client_headers,
+    )
+    application_id = created.json()["id"]
+    submitted = client.post(
+        f"/api/v1/applications/{application_id}/submit?version=1",
+        headers=client_headers,
+    )
+    assert submitted.json()["status"] == "MANUAL_REVIEW"
+    assert submitted.json()["decision_reason_code"] == "EXTERNAL_CHECK_UNAVAILABLE"
+
+    employee_token = bearer_token(
+        client, "test.employee1@example.com", "local-test-password"
+    )
+    employee_card = client.get(
+        f"/api/v1/employee/applications/{application_id}",
+        headers={"Authorization": f"Bearer {employee_token}"},
+    )
+    assert employee_card.json()["next_actions"] == ["RETRY_CHECKS"]
+    blocked = client.post(
+        f"/api/v1/employee/applications/{application_id}/action",
+        json={
+            "action": "APPROVE",
+            "version": submitted.json()["version"],
+            "approved_amount": "1000000.00",
+            "comment": "Cannot approve before checks complete.",
+        },
+        headers={"Authorization": f"Bearer {employee_token}"},
+    )
+    assert blocked.status_code == 409
+
+
+def test_repeated_check_failure_keeps_technical_manual_review(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with TestSession() as db:
+        seed_test_users(db, "local-test-password")
+        db.commit()
+
+    client_token = bearer_token(
+        client, "test.client3@example.com", "local-test-password"
+    )
+    headers = {"Authorization": f"Bearer {client_token}"}
+    created = client.post(
+        "/api/v1/applications",
+        json=application_request(),
+        headers=headers,
+    )
+    application_id = created.json()["id"]
+    submitted = client.post(
+        f"/api/v1/applications/{application_id}/submit?version=1",
+        headers=headers,
+    )
+    assert submitted.json()["status"] == "MANUAL_REVIEW"
+    assert submitted.json()["decision_reason_code"] == "EXTERNAL_CHECK_UNAVAILABLE"
+
+    monkeypatch.setattr(
+        application_service.fns_mock,
+        "get_fns_result",
+        lambda *_args: FNSResult(
+            status="TIMEOUT", is_active=None, business_age_months=None
+        ),
+    )
+    employee_token = bearer_token(
+        client, "test.employee1@example.com", "local-test-password"
+    )
+    retried = client.post(
+        f"/api/v1/employee/applications/{application_id}/retry-checks"
+        f"?version={submitted.json()['version']}",
+        headers={"Authorization": f"Bearer {employee_token}"},
+    )
+    assert retried.status_code == 200
+    assert retried.json()["status"] == "MANUAL_REVIEW"
+    assert retried.json()["decision_reason_code"] == "EXTERNAL_CHECK_UNAVAILABLE"
+    assert retried.json()["checks"][-2]["status"] == "TIMEOUT"
+
+
+def test_known_stop_factor_blocks_manual_approval(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with TestSession() as db:
+        seed_test_users(db, "local-test-password")
+        db.commit()
+
+    monkeypatch.setattr(
+        application_service,
+        "evaluate_credit",
+        lambda *_args, **_kwargs: CreditEvaluation(
+            status="MANUAL_REVIEW",
+            score=65,
+            reason_code="SCORE_REQUIRES_MANUAL_REVIEW",
+        ),
+    )
+    client_token = bearer_token(
+        client, "test.client2@example.com", "local-test-password"
+    )
+    created = client.post(
+        "/api/v1/applications",
+        json=application_request(),
+        headers={"Authorization": f"Bearer {client_token}"},
+    )
+    application_id = created.json()["id"]
+    submitted = client.post(
+        f"/api/v1/applications/{application_id}/submit?version=1",
+        headers={"Authorization": f"Bearer {client_token}"},
+    )
+    assert submitted.json()["status"] == "MANUAL_REVIEW"
+
+    employee_token = bearer_token(
+        client, "test.employee1@example.com", "local-test-password"
+    )
+    blocked = client.post(
+        f"/api/v1/employee/applications/{application_id}/action",
+        json={
+            "action": "APPROVE",
+            "version": submitted.json()["version"],
+            "approved_amount": "1000000.00",
+            "comment": "Попытка одобрить заявку со стоп-фактором.",
+        },
+        headers={"Authorization": f"Bearer {employee_token}"},
+    )
+    assert blocked.status_code == 409
 
 
 def test_demo_client_two_is_rejected_by_placeholder_score(client: TestClient) -> None:
@@ -445,7 +779,17 @@ def test_demo_client_one_is_approved(client: TestClient) -> None:
 
     assert submitted.status_code == 200
     assert submitted.json()["status"] == "APPROVED"
+    assert submitted.json()["next_actions"] == ["SIGN"]
     assert submitted.json()["score"] == 95
+    assert submitted.json()["scoring_result"]["model"] == "mvp_demo_thresholds_v1"
+    assert submitted.json()["scoring_result"]["score"] == 95
+    assert submitted.json()["scoring_result"]["reason_code"] == (
+        "SCORE_MEETS_APPROVAL_THRESHOLD"
+    )
+    with TestSession() as db:
+        stored = db.get(Application, created.json()["id"])
+        assert stored is not None
+        assert stored.scoring_result == submitted.json()["scoring_result"]
     assert submitted.json()["requested_amount"] == "1500000.00"
     assert submitted.json()["checks"][0]["response_data"] == {
         "is_active": True,
