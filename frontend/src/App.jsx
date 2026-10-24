@@ -11,6 +11,7 @@ import ClientDashboard from './pages/client/ClientDashBoard';
 import ClientApplications from './pages/client/ClientApplications';
 import ClientApplicationNew from './pages/client/ClientApplicationNew';
 import ClientApplicationDetail from './pages/client/ClientApplicationDetail';
+import ClientDocuments from './pages/client/ClientDocuments';
 import ClientProducts from './pages/client/ClientProducts';
 
 // Страницы сотрудника (создадим ниже)
@@ -49,7 +50,7 @@ function ClientLayout() {
         <Route path="/applications" element={<ClientApplications />} />
         <Route path="/applications/new" element={<ClientApplicationNew />} />
         <Route path="/applications/:id" element={<ClientApplicationDetail />} />
-        <Route path="/documents" element={<Card title="Документы">Раздел в разработке</Card>} />
+        <Route path="/documents" element={<ClientDocuments />} />
       </Routes>
     </AppShell>
   );

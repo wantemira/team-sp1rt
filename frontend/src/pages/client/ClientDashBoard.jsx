@@ -1,12 +1,25 @@
+import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { PageHeader } from '../../components/layout/AppShell';
 import { Card, Button } from '../../components/ui';
 import { useNavigate } from 'react-router-dom';
-import { mockApplications } from '../../lib/mockData';
+import { mockBackend } from '../../api/mockBackend';
+
+// Импортируем компонент новостей от друга
+import { NewsFeed } from '../../components/credit';
 
 export default function ClientDashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  
+  const [news, setNews] = useState([]);
+  const [appCount, setAppCount] = useState(0);
+
+  useEffect(() => {
+    // Загружаем новости и количество заявок
+    mockBackend.getNews().then(setNews);
+    mockBackend.getAll().then(apps => setAppCount(apps.length));
+  }, []);
 
   return (
     <>
@@ -15,23 +28,32 @@ export default function ClientDashboard() {
         description={`Добро пожаловать, ${user?.name || user?.email}`}
         action={<Button variant="secondary" onClick={logout}>Выйти</Button>} 
       />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+      
+      {/* Сетка из двух колонок */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', alignItems: 'start' }}>
+        
+        {/* Левая колонка: Заявки */}
         <Card title="Мои заявки">
-          {mockApplications.length > 0 ? (
+          {appCount > 0 ? (
             <>
-              <p>У вас есть активные заявки: <strong>{mockApplications.length}</strong></p>
-              <Button style={{ marginTop: '16px' }}  onClick={() => navigate('/client/applications')}>Перейти к списку</Button>
+              <p>У вас есть заявки: <strong>{appCount}</strong></p>
+              <Button style={{ marginTop: '16px' }} onClick={() => navigate('/client/applications')}>
+                Перейти к списку
+              </Button>
             </>
           ) : (
             <>
               <p>У вас пока нет активных заявок.</p>
-              <Button style={{ marginTop: '16px' }}  onClick={() => navigate('/client/applications/new')}>Создать заявку</Button>
+              <Button style={{ marginTop: '16px' }} onClick={() => navigate('/client/applications/new')}>
+                Создать заявку
+              </Button>
             </>
           )}
         </Card>
-        <Card title="Новости">
-          <p>Здесь будут персональные новости.</p>
-        </Card>
+        
+        {/* Правая колонка: Новости (используем компонент друга) */}
+        <NewsFeed items={news} />
+        
       </div>
     </>
   );

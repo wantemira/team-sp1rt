@@ -4,6 +4,7 @@ import { Card, Button } from '../../components/ui';
 import { ApplicationForm } from '../../components/credit';
 import { useNavigate } from 'react-router-dom';
 import { mockBackend } from '../../api/mockBackend';
+import { getFieldErrors } from '../../api/client';
 
 export default function ClientApplicationNew() {
   const navigate = useNavigate();
@@ -56,7 +57,11 @@ export default function ClientApplicationNew() {
         alert('Черновик обновлен!');
       }
     } catch (err) {
-      setError(err.message);
+      if (err.status === 422) {
+        setFieldErrors(getFieldErrors(err)); // Передаем в ApplicationForm пропс errors
+      } else {
+        setError(err.message);
+      }
     } finally {
       setIsSaving(false);
     }

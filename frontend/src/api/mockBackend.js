@@ -151,5 +151,77 @@ export const mockBackend = {
     };
     saveDB(db);
     return db.apps[index];
+  },
+
+    // --- НОВОСТИ ---
+  getNews: async () => {
+    await delay(300);
+    return [
+      { 
+        id: 1, 
+        title: 'Изменение ставок по кредитам', 
+        date: '2026-10-20', 
+        excerpt: 'С 1 ноября базовая ставка снижается на 0.5%.', 
+        body: 'Подробности: для всех новых заявок на оборотные средства ставка будет пересчитана автоматически. Старые договоры не затрагиваются.',
+        isPersonal: true 
+      },
+      { 
+        id: 2, 
+        title: 'Новые требования к документам', 
+        date: '2026-10-18', 
+        excerpt: 'Теперь справку о доходах можно загрузить в формате PDF.', 
+        body: 'Убедительная просьба загружать справки в формате PDF. Файлы в формате JPEG и PNG также принимаются, но могут обрабатываться дольше.',
+        isPersonal: false 
+      },
+    ];
+  },
+
+  // --- ДОКУМЕНТЫ ---
+  getDocuments: async () => {
+    await delay(300);
+    // Имитируем пустой список или с одним файлом
+    return JSON.parse(localStorage.getItem('mock_docs') || '[]');
+  },
+
+uploadDocument: async (formData) => {
+    await delay(800);
+    const docs = JSON.parse(localStorage.getItem('mock_docs') || '[]');
+    const file = formData.get('file');
+    const type = formData.get('document_type'); 
+    
+    if (file.size > 5 * 1024 * 1024) {
+      const err = new Error('Ошибка валидации');
+      err.status = 422;
+      err.details = { fields: [{ field: 'file', message: 'Максимальный размер файла 5 МБ' }] };
+      throw err;
+    }
+
+    // Словарь для перевода кода в читаемый текст
+    const typeLabels = {
+      'financial_statement': 'Справка о доходах',
+      'passport': 'Паспорт',
+      'charter': 'Устав компании',
+      'other': 'Прочий документ'
+    };
+
+    const newDoc = {
+      id: Date.now().toString(),
+      file_name: file.name,
+      document_type: typeLabels[type] || 'Документ', 
+      file_size: file.size,
+      created_at: new Date().toISOString(),
+    };
+    
+    docs.push(newDoc);
+    localStorage.setItem('mock_docs', JSON.stringify(docs));
+    return newDoc;
+  },
+
+deleteDocument: async (id) => {
+    await delay(300);
+    const docs = JSON.parse(localStorage.getItem('mock_docs') || '[]');
+    const filtered = docs.filter(d => d.id !== id);
+    localStorage.setItem('mock_docs', JSON.stringify(filtered));
   }
+
 };
