@@ -7,7 +7,6 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Создаем API с правильными коллбэками
   const api = createCreditApi({
     getToken: () => sessionStorage.getItem('token'),
     onUnauthorized: () => {
@@ -23,39 +22,36 @@ export function AuthProvider({ children }) {
       return;
     }
     
-    api.me()
-      .then(userData => setUser(userData))
-      .catch(() => {
-        sessionStorage.removeItem('token');
-        setUser(null);
-      })
-      .finally(() => setLoading(false));
+    // ЖЕСТКАЯ ЗАГЛУШКА для восстановления сессии
+    if (token === 'fake-jwt-token') {
+      const savedUser = sessionStorage.getItem('fake_user');
+      if (savedUser) setUser(JSON.parse(savedUser));
+      setLoading(false);
+      return;
+    }
+
+    // api.me() временно отключен, чтобы не было ECONNREFUSED
+    setLoading(false);
   }, []);
 
   const login = async (email, password) => {
-    // ВРЕМЕННАЯ ЗАГЛУШКА (Пока нет бэка)
     if (password === '123') {
       const fakeRole = email.includes('employee') ? 'employee' : 'client';
       const fakeResponse = { 
         token: 'fake-jwt-token', 
-        user: { role: fakeRole, name: email, email: email } 
+        user: { role: fakeRole, name: email.split('@')[0], email: email } 
       };
       sessionStorage.setItem('token', fakeResponse.token);
+      sessionStorage.setItem('fake_user', JSON.stringify(fakeResponse.user));
       setUser(fakeResponse.user);
       return fakeResponse.user.role;
     }
-    
-    // РЕАЛЬНЫЙ КОД (раскомментировать, когда появится бэк)
-    // const response = await api.login({ email, password });
-    // sessionStorage.setItem('token', response.token);
-    // setUser(response.user);
-    // return response.user.role; 
-    
     throw new Error('Неверный пароль (введите 123)');
   };
 
   const logout = () => {
     sessionStorage.removeItem('token');
+    sessionStorage.removeItem('fake_user');
     setUser(null);
   };
 

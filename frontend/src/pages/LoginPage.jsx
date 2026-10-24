@@ -16,52 +16,53 @@ export default function LoginPage() {
     e.preventDefault();
     setError('');
     setIsSubmitting(true);
-
     try {
       const role = await login(email, password);
-      if (role === 'employee') {
-        navigate('/employee/applications');
-      } else {
-        navigate('/client');
-      }
+      navigate(role === 'employee' ? '/employee/applications' : '/client');
     } catch (err) {
-      setError(err.message || 'Неверный email или пароль');
+      setError(err.message || 'Ошибка входа');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-      <Card title="Вход в систему" style={{ width: 400 }}>
-        {error && <InlineAlert type="error">{error}</InlineAlert>}
-        
-        <form onSubmit={handleSubmit} className="stack">
-          <label>
-            Email
-            <input 
-              type="email" 
-              value={email} 
-              onChange={e => setEmail(e.target.value)} 
-              required 
-              disabled={isSubmitting}
-            />
-          </label>
-          <label>
-            Пароль
-            <input 
-              type="password" 
-              value={password} 
-              onChange={e => setPassword(e.target.value)} 
-              required 
-              disabled={isSubmitting}
-            />
-          </label>
-          <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? 'Вход...' : 'Войти'}
-          </Button>
-        </form>
-      </Card>
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', backgroundColor: 'var(--bg-subtle, #f4f5f7)' }}>
+      <div style={{ width: '100%', maxWidth: 400, padding: 20 }}>
+        <Card title="Вход в систему">
+          <form onSubmit={handleSubmit} className="stack" style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '16px' }}>
+            {error && <InlineAlert type="error">{error}</InlineAlert>}
+            
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <span>Email</span>
+              <input 
+                type="email" 
+                value={email} 
+                onChange={e => setEmail(e.target.value)} 
+                required 
+                disabled={isSubmitting}
+                style={{ padding: '10px', borderRadius: '6px', border: '1px solid #ccc' }}
+                placeholder="client@test.com"
+              />
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <span>Пароль</span>
+              <input 
+                type="password" 
+                value={password} 
+                onChange={e => setPassword(e.target.value)} 
+                required 
+                disabled={isSubmitting}
+                style={{ padding: '10px', borderRadius: '6px', border: '1px solid #ccc' }}
+                placeholder="Введите 123"
+              />
+            </label>
+            <Button type="submit" disabled={isSubmitting} style={{ marginTop: '8px', width: '100%' }}>
+              {isSubmitting ? 'Вход...' : 'Войти'}
+            </Button>
+          </form>
+        </Card>
+      </div>
     </div>
   );
 }
