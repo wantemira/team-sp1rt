@@ -1,16 +1,42 @@
-# React + Vite
+# Кредитный кабинет · React/Vite UI kit
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Готовые компоненты и интерактивные примеры по [макету Figma](https://www.figma.com/design/wgRN4B9mhnjYPYibo6FkoR?node-id=3-16).
+Это библиотека для сборки кабинетов. Примеры используют синтетические данные и **не выполняют банковские операции и авторизацию**.
 
-Currently, two official plugins are available:
+## Запуск
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Node.js 22.12+ или 24 LTS.
 
-## React Compiler
+```bash
+cd frontend
+npm ci
+npm run dev
+```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Откройте адрес Vite. Переключатели над макетом: клиент, новая заявка, сотрудник, компоненты.
+Прямые ссылки: `/?view=dashboard`, `/?view=application`, `/?view=employee`, `/?view=components`.
 
-## Expanding the Oxlint configuration
+## Разработчику
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+[FRONTEND_HANDOFF.md](./FRONTEND_HANDOFF.md) — порядок сборки рабочего фронтенда, props компонентов, карта Figma → React, API и оставшиеся задачи.
+
+- `src/components/ui` — базовые элементы.
+- `src/components/layout` — каркас и навигация.
+- `src/components/credit` — кредитные блоки и формы.
+- `src/styles/tokens.css` — единые цвета и размеры.
+- `src/demo` — исключительно примеры, не production-данные.
+- `src/api` — отдельный адаптер согласованного HTTP API; сам ничего не вызывает.
+
+## Проверки
+
+```bash
+npm run lint
+npm test
+npm run build
+npx playwright install chromium
+npm run test:ui
+```
+
+На Linux с системным Chromium можно задать `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/usr/bin/chromium`.
+Шрифт Inter поставляется локально через `@fontsource/inter`; внешние CDN не нужны.
+Дизайн — концепт для хакатона, не официальный интерфейс банка.

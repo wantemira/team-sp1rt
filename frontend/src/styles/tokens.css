@@ -1,0 +1,22 @@
+:root {
+  font-family: 'Inter', sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  --color-red: #ef3124;
+  --color-red-hover: #d9271c;
+  --color-pink: #fdedeb;
+  --color-white: #fff;
+  --color-bg: #f4f5f7;
+  --color-ink: #202124;
+  --color-muted: #727783;
+  --color-line: #e7e9ed;
+  --color-green: #13734b;
+  --color-green-bg: #e9f5ee;
+  --color-amber: #955b00;
+  --color-amber-bg: #fff3de;
+  --color-danger: #b42318;
+  --radius-card: 24px;
+  --radius-control: 12px;
+  --space-page: 24px;
+}
