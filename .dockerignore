@@ -6,7 +6,6 @@ __pycache__
 .pytest_cache
 storage
 frontend
-tests
 Api.md
 api.yaml
 DB.md
