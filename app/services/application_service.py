@@ -4,24 +4,31 @@ from typing import Any
 
 from fastapi import HTTPException, UploadFile, status
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm.exc import StaleDataError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models import (
     Application,
+    ApplicationCheck,
     ApplicationDocument,
     ApplicationStatusHistory,
     Client,
     User,
 )
+from app.integrations import bki_mock, fns_mock
 from app.repositories import application_repository
 from app.schemas.applications import (
     ApplicationCreate,
+    ApplicationFill,
+    ApplicationPatch,
+    BusinessData,
     EmployeeActionRequest,
     EmployeeApplicationDetail,
     EmployeeApplicationShort,
     QueueStatus,
 )
+from app.services.credit_evaluation import evaluate_credit
 
 logger = logging.getLogger(__name__)
 
@@ -29,10 +36,38 @@ logger = logging.getLogger(__name__)
 def _commit(db: Session) -> None:
     try:
         db.commit()
+    except StaleDataError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Application was changed by another request. Reload it and retry.",
+        ) from exc
     except SQLAlchemyError:
         db.rollback()
         logger.exception("Database commit failed.")
         raise
+
+
+def _check_version(application: Application, expected_version: int) -> None:
+    if application.version != expected_version:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Application version is stale. Reload it and retry.",
+        )
+
+
+def _serialize_business_data(
+    data: BusinessData, *, exclude_unset: bool = False
+) -> dict[str, Any]:
+    serialized = data.model_dump(
+        mode="json",
+        exclude_none=not exclude_unset,
+        exclude_unset=exclude_unset,
+    )
+    financials = serialized.get("financials")
+    if not exclude_unset and not financials:
+        serialized["financials"] = {}
+    return serialized
 
 
 def _merge_dict(target: dict[str, Any], update: dict[str, Any]) -> dict[str, Any]:
@@ -75,26 +110,31 @@ def create_application(
     client = _client_or_forbidden(user)
     application = Application(
         client_id=client.id,
-        product_type=data.product_type.value,
+        product_type=data.product_type,
         requested_amount=data.requested_amount,
         requested_term_months=data.requested_term_months,
         purpose=data.purpose,
-        status="CHECKING",
-        business_data=data.business_data,
+        status="DRAFT",
+        business_data=_serialize_business_data(data.business_data),
     )
     db.add(application)
     db.flush()
     db.add(
         ApplicationStatusHistory(
             application_id=application.id,
-            previous_status="DRAFT",
-            new_status="CHECKING",
+            previous_status=None,
+            new_status="DRAFT",
             changed_by="CLIENT",
-            comment="Application submitted.",
+            comment="Draft created.",
         )
     )
     _commit(db)
     return _get_client_application(db, user, application.id)
+
+
+def get_client_applications(db: Session, user: User) -> list[Application]:
+    client = _client_or_forbidden(user)
+    return application_repository.get_client_applications(db, client.id)
 
 
 def get_client_application(
@@ -103,29 +143,216 @@ def get_client_application(
     return _get_client_application(db, user, application_id)
 
 
-def fill_application(
-    db: Session, user: User, application_id: int, business_data: dict[str, Any]
+def patch_application(
+    db: Session, user: User, application_id: int, data: ApplicationPatch
 ) -> Application:
     application = _get_client_application(db, user, application_id)
-    if application.status != "NEEDS_INFO":
+    if application.status != "DRAFT":
         raise HTTPException(
             status_code=409,
-            detail="Application is not waiting for additional information.",
+            detail="Only draft applications can be edited.",
+        )
+    _check_version(application, data.version)
+
+    fields = data.model_fields_set
+    if "requested_amount" in fields:
+        application.requested_amount = data.requested_amount
+    if "requested_term_months" in fields:
+        application.requested_term_months = data.requested_term_months
+    if "purpose" in fields:
+        application.purpose = data.purpose
+    if "business_data" in fields:
+        changes = _serialize_business_data(
+            data.business_data, exclude_unset=True
+        )
+        application.business_data = _merge_dict(application.business_data, changes)
+
+    _commit(db)
+    return _get_client_application(db, user, application_id)
+
+
+def submit_application(
+    db: Session, user: User, application_id: int, expected_version: int
+) -> Application:
+    application = _get_client_application(db, user, application_id)
+    _check_version(application, expected_version)
+    if application.status != "DRAFT":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only draft applications can be submitted.",
+        )
+    if (
+        application.requested_amount is None
+        or not 100000 <= application.requested_amount <= 5000000
+        or application.requested_term_months not in {6, 12, 24}
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "requested_amount must be between 100000 and 5000000, and "
+                "requested_term_months must be 6, 12, or 24."
+            ),
         )
 
+    return _run_credit_checks(
+        db,
+        application,
+        changed_by="CLIENT",
+        transition_comment="Application submitted for review.",
+    )
+
+
+def fill_application(
+    db: Session, user: User, application_id: int, data: ApplicationFill
+) -> Application:
+    application = _get_client_application(db, user, application_id)
+    _check_version(application, data.version)
+    if application.status != "NEEDS_INFO":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only applications that need information can be filled.",
+        )
+    changes = _serialize_business_data(data.business_data, exclude_unset=True)
+    application.business_data = _merge_dict(application.business_data, changes)
+    return _run_credit_checks(
+        db,
+        application,
+        changed_by="CLIENT",
+        transition_comment="Client provided requested financial information.",
+    )
+
+
+def retry_checks(
+    db: Session, employee: User, application_id: int, expected_version: int
+) -> Application:
+    if employee.role != "employee":
+        raise HTTPException(status_code=403, detail="Employee role required.")
+    application = application_repository.get_employee_application(db, application_id)
+    if application is None:
+        raise _not_found()
+    _check_version(application, expected_version)
+    if application.status != "MANUAL_REVIEW":
+        raise HTTPException(
+            status_code=409,
+            detail="Checks can only be retried for applications in MANUAL_REVIEW.",
+        )
+    latest_checks: dict[str, ApplicationCheck] = {}
+    for check in application.checks:
+        if check.check_type in {"FNS", "BKI"}:
+            latest_checks[check.check_type] = check
+    if not any(
+        check.status in {"TIMEOUT", "ERROR"} for check in latest_checks.values()
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Application has no failed external checks to retry.",
+        )
+    return _run_credit_checks(
+        db,
+        application,
+        changed_by="EMPLOYEE",
+        transition_comment="Employee retried unavailable external checks.",
+    )
+
+
+def _run_credit_checks(
+    db: Session,
+    application: Application,
+    *,
+    changed_by: str,
+    transition_comment: str,
+) -> Application:
     previous_status = application.status
-    application.business_data = _merge_dict(application.business_data, business_data)
-    application.status = "CHECKING"
+    try:
+        fns_attempt_number = (
+            sum(check.check_type == "FNS" for check in application.checks) + 1
+        )
+        client = application.client
+        fns_result = fns_mock.get_fns_result(client.inn, fns_attempt_number)
+        bki_result = bki_mock.get_bki_result(client.inn)
+        evaluation = evaluate_credit(application, fns_result, bki_result)
+        db.add_all(
+            [
+                ApplicationCheck(
+                    application_id=application.id,
+                    check_type="FNS",
+                    status=fns_result.status,
+                    response_data=fns_result.as_response_data(),
+                ),
+                ApplicationCheck(
+                    application_id=application.id,
+                    check_type="BKI",
+                    status=bki_result.status,
+                    response_data=bki_result.as_response_data(),
+                ),
+            ]
+        )
+        application.status = evaluation.status
+        application.score = evaluation.score
+        application.risk_grade = None
+        application.decision_reason_code = evaluation.reason_code
+        db.add(
+            ApplicationStatusHistory(
+                application_id=application.id,
+                previous_status=previous_status,
+                new_status="CHECKING",
+                changed_by=changed_by,
+                comment=transition_comment,
+            )
+        )
+        db.add(
+            ApplicationStatusHistory(
+                application_id=application.id,
+                previous_status="CHECKING",
+                new_status=evaluation.status,
+                changed_by="SYSTEM",
+                comment=evaluation.reason_code,
+            )
+        )
+        _commit(db)
+    except Exception:
+        db.rollback()
+        logger.exception("Credit checks failed for application %s.", application.id)
+        raise
+
+    db.expire(application, ["status_history", "checks"])
+    if changed_by == "CLIENT":
+        updated_application = application_repository.get_client_application(
+            db, application.id, application.client_id
+        )
+        if updated_application is None:
+            raise _not_found()
+        return updated_application
+    updated_application = application_repository.get_employee_application(
+        db, application.id
+    )
+    if updated_application is None:
+        raise _not_found()
+    return updated_application
+
+
+def sign_application(
+    db: Session, user: User, application_id: int, expected_version: int
+) -> Application:
+    application = _get_client_application(db, user, application_id)
+    _check_version(application, expected_version)
+    if application.status != "APPROVED":
+        raise HTTPException(
+            status_code=409,
+            detail="Only approved applications can be issued.",
+        )
+    application.status = "ISSUED"
     db.add(
         ApplicationStatusHistory(
             application_id=application.id,
-            previous_status=previous_status,
-            new_status=application.status,
+            previous_status="APPROVED",
+            new_status="ISSUED",
             changed_by="CLIENT",
-            comment="Requested application information was provided.",
+            comment="Credit agreement signed.",
         )
     )
     _commit(db)
+    db.expire(application, ["status_history"])
     return _get_client_application(db, user, application_id)
 
 
@@ -244,6 +471,7 @@ def get_employee_application(
                 field: getattr(application, field)
                 for field in (
                     "id",
+                    "version",
                     "product_type",
                     "requested_amount",
                     "requested_term_months",
@@ -279,9 +507,11 @@ def employee_decision(
     application = application_repository.get_employee_application(db, application_id)
     if application is None:
         raise _not_found()
-    if application.status in {"APPROVED", "REJECTED"}:
+    _check_version(application, decision.version)
+    if application.status != "MANUAL_REVIEW":
         raise HTTPException(
-            status_code=400, detail="Application already has a final decision."
+            status_code=409,
+            detail="Employee decisions are only available in MANUAL_REVIEW.",
         )
     if decision.action.value in {"REJECT", "REQUEST_INFO"} and not decision.decision_reason_code:
         raise HTTPException(
@@ -312,4 +542,10 @@ def employee_decision(
         )
     )
     _commit(db)
-    return application_repository.get_employee_application(db, application_id)  # type: ignore[return-value]
+    db.expire(application, ["status_history", "checks"])
+    updated_application = application_repository.get_employee_application(
+        db, application_id
+    )
+    if updated_application is None:
+        raise _not_found()
+    return updated_application

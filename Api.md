@@ -7,6 +7,16 @@
 Поля ниже записаны в формате `имя_поля (тип)`. Поля с пометкой «необязательное» не обязательны, если иное не указано.
 Структура сверена с таблицами из [DB.md](./DB.md). Имена полей используют snake_case как в БД. В текущей реализации первичные ключи — целые числа; при миграции существующей БД используйте её фактический тип ID.
 
+## Продукт MVP
+
+- `product_type`: `term_loan`
+- Название: `Кредит на оборотные средства`
+- Сумма: от `100000.00` до `5000000.00` рублей
+- Срок: `6`, `12` или `24` месяца
+- Выдача одна, срок фиксированный, платежи аннуитетные
+- Денежные значения в JSON передаются строками рублей, например `"1500000.00"`;
+  в БД суммы хранятся как `Numeric`, расчёты выполняются через `Decimal`.
+
 ## Аутентификация и авторизация
 
 Регистрация через API не предусмотрена: в личный кабинет входят уже существующие клиенты и сотрудники, чьи учётные записи и профили заранее заведены в БД.
@@ -88,75 +98,48 @@
 - `employees` — профиль банковского сотрудника: `id`, `user_id`, `full_name`, `position`, `created_at`.
 - Входящий запрос содержит только поля, которые пользователь вводит или изменяет. Связи с пользователем/клиентом, роли, статусы обработки, скоринговые результаты и даты выставляет сервер; идентификаторы внешних ключей нельзя принимать от клиента как доказательство доступа.
 - `applications` — входные параметры заявки (`product_type`, `requested_amount`, `requested_term_months`, `purpose`) и введённые клиентом дополнительные финансовые сведения (`business_data`).
-- `application_checks` — серверные результаты проверок внешних и внутренних источников (`check_type`, `status`, `response_data`); например, ответ БКИ или сведения о компании из ФНС/ЕГРЮЛ/ЕГРИП. Клиент эти результаты не передаёт.
+- `application_checks` — серверные результаты проверок внешних и внутренних источников (`check_type`, `status`, `response_data`); клиент их не передаёт. Для ФНС в `response_data` хранятся `is_active` (boolean или null) и `business_age_months` (integer или null), для БКИ — `current_overdue_days` (integer или null) и `monthly_debt_payments` (string рублей или null). У каждой попытки проверки создаётся отдельная запись.
 - `application_documents` — метаданные файлов (`document_type`, `file_url`, `status`); сами файлы хранятся во внешнем файловом/объектном хранилище, ссылка на файл сохраняется в БД.
 - `application_status_history` — серверная история смены статусов; сотрудник передаёт `comment` при действии по заявке, а `previous_status`, `new_status`, `changed_by` и `created_at` формирует сервер.
 
 ## Клиентские эндпоинты
 
-Для кредитной заявки клиент указывает продукт, сумму, срок, цель и дополнительные бизнес-данные. Сервер связывает её с профилем вошедшего клиента, выполняет проверки и скоринг, затем возвращает текущий статус. Результатом рассмотрения могут быть условия финансирования, запрос дополнительных данных/документов или отказ. Набор проверок и необходимых документов может зависеть от продукта и клиента.
+Клиент создаёт заявку-черновик, может редактировать её, пока она находится в статусе `DRAFT`, а затем отдельным запросом отправляет на проверку. При обработке результатом могут быть условия финансирования, запрос дополнительных данных/документов или отказ.
 
-### POST `/applications` — Создание и подача кредитной заявки
+### GET `/products` — Доступный продукт
+
+Публичный маршрут возвращает единственный продукт MVP:
+
+- `id` (string; `term_loan`)
+- `name` (string; `Кредит на оборотные средства`)
+- `min_amount` (string рублей; `"100000.00"`)
+- `max_amount` (string рублей; `"5000000.00"`)
+- `terms` (array of integer; `[6, 12, 24]`)
+- `disbursement_count` (integer; `1`)
+- `term_type` (string; `fixed`)
+- `repayment_type` (string; `annuity`)
+
+Условия продукта: одна выдача, фиксированный срок, аннуитетные платежи.
+
+### POST `/applications` — Создание черновика заявки
 
 **Запрос (`CreateApplicationRequest`):**
 
-- `product_type` (string; `credit_line`, `overdraft` или `term_loan`) — обязательно
-- `requested_amount` (number) — обязательно
-- `requested_term_months` (integer) — обязательно
+- `product_type` (string; только `term_loan`) — обязательно
+- `requested_amount` (string или null) — необязательно; при заполнении от 100000.00 до 5000000.00 рублей
+- `requested_term_months` (integer или null; `6`, `12` или `24`) — необязательно
 - `purpose` (string) — необязательно
-- `business_data` (object, JSON) — обязательно; произвольные бизнес-данные, хранящиеся в `applications.business_data`
+- `business_data` (object, JSON) — необязательно; при отсутствии финансовых данных сервер сохранит `{"financials": {}}`
 
-`client_id` берётся сервером из профиля `clients`, найденного по ID вошедшего пользователя. `inn`, `company_name` и `client_type` хранятся в профиле `clients`, а не в теле этой заявки. `business_data` предназначен только для дополнительных финансовых и бизнес-сведений, нужных для оценки заявки; он сохраняется в `applications.business_data`.
-
-Пример JSON-запроса (ключи внутри `business_data` — пример структуры данных, а не отдельные столбцы БД):
+Для создания достаточно передать:
 
 ```json
-{
-  "product_type": "credit_line",
-  "requested_amount": 1500000,
-  "requested_term_months": 12,
-  "purpose": "Пополнение оборотных средств",
-  "business_data": {
-    "financials": {
-      "annual_revenue": 5000000,
-      "monthly_expenses": 300000
-    },
-    "existing_obligations": []
-  }
-}
+{"product_type": "term_loan"}
 ```
 
-Данные, которые банк получает из внешних источников (например, кредитная история или сведения ФНС/ЕГРЮЛ/ЕГРИП), получает сервер и хранит в `application_checks.response_data`, а не принимает от клиента как проверенный результат.
+`client_id` берётся сервером из профиля `clients`, найденного по ID вошедшего пользователя. При создании заявка получает статус `DRAFT`. Отсутствующие сумма и срок хранятся как `null`; для отсутствующих финансовых показателей не подставляются нули. Данные внешних проверок сервер хранит в `application_checks.response_data`.
 
-**Успешный ответ — 201 (`ApplicationStatusResponse`):**
-
-- `id` (integer, идентификатор `applications.id`)
-- `product_type` (string)
-- `requested_amount` (number)
-- `requested_term_months` (integer)
-- `purpose` (string или null)
-- `status` (string; `DRAFT`, `CHECKING`, `NEEDS_INFO`, `MANUAL_REVIEW`, `APPROVED` или `REJECTED`)
-- `business_data` (object, JSON)
-- `score` (integer или null)
-- `risk_grade` (string или null; `A`, `B`, `C`, `D` или `E`)
-- `decision_reason_code` (string или null)
-- `approved_amount` (number или null)
-- `approved_rate` (number или null)
-- `created_at` (string, date-time)
-- `updated_at` (string, date-time)
-- `documents` (array of object) — прикреплённые к заявке документы, их статус указан сервером
-  - `id` (integer, идентификатор `application_documents.id`)
-  - `document_type` (string)
-  - `file_url` (string, ссылка на файл во внешнем хранилище)
-  - `status` (string; `PENDING`, `VERIFIED` или `REJECTED`)
-  - `created_at` (string, date-time)
-- `status_history` (array of object) — история из `application_status_history`; комментарий последнего перехода поясняет, какую дополнительную информацию запросил банк
-  - `id` (integer, идентификатор `application_status_history.id`)
-  - `previous_status` (string или null)
-  - `new_status` (string)
-  - `changed_by` (string; `CLIENT`, `SYSTEM` или `EMPLOYEE`)
-  - `comment` (string или null)
-  - `created_at` (string, date-time)
+**Успешный ответ — 201 (`ApplicationResponse`):** заявка с `status = DRAFT`, `version = 1`; `requested_amount` и `requested_term_months` могут быть `null`; `business_data` по умолчанию равен `{"financials": {}}`. Первая запись истории создаётся вместе с черновиком: `previous_status = null`, `new_status = DRAFT`, `changed_by = CLIENT`.
 
 **Ошибки:**
 
@@ -166,6 +149,17 @@
   - `details` (object или null)
 - **401** — пользователь не авторизован; тело `ErrorResponse`.
 - **403** — токен действителен, но профиль пользователя не является клиентским; тело `ErrorResponse`.
+
+### GET `/applications` — Список заявок клиента
+
+Возвращает все заявки, принадлежащие профилю текущего клиента, включая черновики. Чужие заявки не возвращаются.
+
+**Успешный ответ — 200:** массив `ApplicationResponse`; если заявок нет, возвращается пустой массив.
+
+**Ошибки:**
+
+- **401** — токен отсутствует, недействителен или просрочен; тело `ErrorResponse`.
+- **403** — пользователь не является клиентом; тело `ErrorResponse`.
 
 ### GET `/applications/{id}` — Получение статуса заявки
 
@@ -184,32 +178,82 @@
   - `message` (string)
   - `details` (object или null)
 
-### PATCH `/applications/{id}/fill` — Дозаполнение данных по заявке
+### PATCH `/applications/{id}` — Редактирование черновика заявки
+
+Редактировать можно только собственную заявку в статусе `DRAFT`. Передавайте последнюю полученную `version`; после каждого изменения сервер увеличивает её. Обновление не меняет статус и не создаёт новую запись истории статусов.
+
+**Параметр пути:**
+
+- `id` (integer, идентификатор `applications.id`) — обязательно
+
+**Запрос (`application/json`):**
+
+- `version` (integer) — обязательно; версия из последнего ответа
+- `requested_amount` (string или null) — необязательно
+- `requested_term_months` (integer или null; `6`, `12` или `24`) — необязательно
+- `purpose` (string или null) — необязательно
+- `business_data` (object) — необязательно; финансовые показатели `annual_revenue` и `annual_expenses` могут оставаться незаполненными
+
+**Успешный ответ — 200:** обновлённый `ApplicationResponse` со статусом `DRAFT` и новой `version`.
+
+**Ошибки:**
+
+- **401** — токен отсутствует, недействителен или просрочен; тело `ErrorResponse`.
+- **403** — пользователь не является клиентом; тело `ErrorResponse`.
+- **404** — заявка не найдена или принадлежит другому клиенту; тело `ErrorResponse`.
+- **409** — заявка не в статусе `DRAFT` или `version` устарела; тело `ErrorResponse`.
+- **422** — неверный формат или ограничения полей запроса; тело `ErrorResponse`.
+
+### POST `/applications/{id}/submit` — Отправка заявки на проверку
+
+Отдельное действие для кнопки отправки. Сумма должна быть от 100 000 до 5 000 000 рублей, срок — 6, 12 или 24 месяца. После проверки версии и состояния сервер синхронно вызывает моки ФНС/БКИ и `evaluate_credit`. Проверки, score, итоговый статус и обе записи истории (`DRAFT → CHECKING → результат`) сохраняются одной транзакцией.
+
+Если финансовые сведения отсутствуют, итоговый статус — `NEEDS_INFO`. Технический `TIMEOUT` или `ERROR` внешней проверки приводит к `MANUAL_REVIEW`. При успешных проверках временная заглушка скоринга возвращает `95` для благоприятного демо-профиля и `20` для профиля с молодым бизнесом или просрочкой; пороги: `0–39 → REJECTED`, `40–89 → MANUAL_REVIEW`, `90–100 → APPROVED`. Заглушка находится в `app/services/credit_evaluation.py` и предназначена для замены будущим скорингом.
 
 **Параметры:**
 
 - `id` (integer, идентификатор `applications.id`; path) — обязательно
+- `version` (integer; query) — обязательно; текущая версия заявки
 
-**Запрос (`application/json`):** передавайте бизнес-данные, которых не хватает. Они дополняют JSON-поле `applications.business_data`:
-
-- `business_data` (object, JSON) — обязательно, непустой объект обновления бизнес-данных
-
-Документы загружаются отдельно через `POST /applications/{id}/documents`. `file_url` и `status` не передаются при дозаполнении: ссылку на сохранённый файл и статус документа назначает сервер.
-
-**Успешный ответ — 200:** `ApplicationStatusResponse` (поля перечислены выше). В ответе `business_data` содержит обновлённые данные; список документов и их статусы также возвращаются в `documents`.
+**Успешный ответ — 200:** карточка `ApplicationResponse` с итоговым статусом, увеличенной версией, результатами `checks` и историей переходов. `CHECKING` является промежуточным состоянием в той же транзакции и виден в истории.
 
 **Ошибки:**
 
-- **422** — неверный формат данных; тело `ErrorResponse`:
-  - `error_code` (string)
-  - `message` (string)
-  - `details` (object или null)
 - **401** — токен отсутствует, недействителен или просрочен; тело `ErrorResponse`.
-- **403** — пользователь не является владельцем заявки или не является клиентом; тело `ErrorResponse`.
-- **409** — заявка не находится в статусе `NEEDS_INFO`; тело `ErrorResponse`:
-  - `error_code` (string)
-  - `message` (string)
-  - `details` (object или null)
+- **403** — пользователь не является клиентом; тело `ErrorResponse`.
+- **404** — заявка не найдена или принадлежит другому клиенту; тело `ErrorResponse`.
+- **409** — заявка не в статусе `DRAFT` или `version` устарела; тело `ErrorResponse`.
+- **422** — сумма или срок отсутствуют либо не соответствуют ограничениям продукта; тело `ErrorResponse`.
+
+Ответ `ApplicationResponse` содержит `version` (integer). Передавайте актуальное значение этой версии при следующем изменении заявки или действии сотрудника.
+
+### POST `/applications/{id}/fill` — Заполнение запрошенных данных
+
+Доступен владельцу заявки в состоянии `NEEDS_INFO`. Принимает актуальную `version` и финансовые данные. Требуется передать хотя бы одно из полей `annual_revenue` или `annual_expenses`. Сервер дополняет `business_data`, синхронно повторяет ФНС/БКИ и скоринг, сохраняет новый цикл проверок и историю переходов одной транзакцией. Итогом может быть `NEEDS_INFO`, `MANUAL_REVIEW`, `APPROVED` или `REJECTED`.
+
+**Запрос (`application/json`):**
+
+- `version` (integer) — обязательно
+- `business_data` (object) — обязательно
+  - `financials` (object) — обязательно
+    - `annual_revenue` (string или null) — сумма в рублях, необязательно
+    - `annual_expenses` (string или null) — сумма в рублях, необязательно
+
+**Успешный ответ — 200:** обновлённая карточка `ApplicationResponse`.
+
+**Ошибки:**
+
+- **401** — нет действительного токена.
+- **403** — пользователь не является клиентом.
+- **404** — заявка отсутствует или принадлежит другому клиенту.
+- **409** — заявка не в статусе `NEEDS_INFO` или версия устарела.
+- **422** — нет финансовых данных или некорректное значение.
+
+### POST `/applications/{id}/sign` — Подписание и выдача
+
+Клиент-владелец может подписать только одобренную заявку (`APPROVED`), передав текущую `version` в query. Сервер переводит её в `ISSUED` и записывает `APPROVED → ISSUED` в историю. В MVP это только изменение статуса: электронная подпись и фактическое перечисление денег не интегрированы.
+
+**Ошибки:** `401` — нет токена; `403` — нет роли клиента; `404` — заявка отсутствует/чужая; `409` — заявка не одобрена или версия устарела.
 
 ### POST `/applications/{id}/documents` — Загрузка документа к заявке
 
@@ -271,7 +315,7 @@
 
 - `id` (integer, идентификатор `applications.id`)
 - `company_name` (string; из `clients.company_name`)
-- `requested_amount` (number)
+- `requested_amount` (string или null; рубли)
 - `risk_grade` (string или null)
 - `status` (string)
 - `created_at` (string, date-time)
@@ -291,6 +335,7 @@
 
 - `id` (integer, идентификатор `applications.id`)
 - `status` (string)
+- `version` (integer; передаётся в действиях сотрудника)
 - `created_at` (string, date-time)
 - `updated_at` (string, date-time)
 - `client_id` (integer, внешний ключ `applications.client_id`)
@@ -299,15 +344,15 @@
   - `inn` (string; `clients.inn`)
   - `company_name` (string; `clients.company_name`)
   - `client_type` (string; `INDIVIDUAL` или `LEGAL_ENTITY`)
-- `product_type` (string)
-- `requested_amount` (number)
-- `requested_term_months` (integer)
+- `product_type` (string; `term_loan`)
+- `requested_amount` (string или null; сумма в рублях)
+- `requested_term_months` (integer или null)
 - `purpose` (string или null)
 - `business_data` (object, JSON)
 - `score` (integer или null)
 - `risk_grade` (string или null; `A`, `B`, `C`, `D` или `E`)
 - `decision_reason_code` (string или null)
-- `approved_amount` (number или null)
+- `approved_amount` (string или null; рубли)
 - `approved_rate` (number или null)
 - `checks` (array of object; записи `application_checks`)
   - `id` (integer, идентификатор `application_checks.id`)
@@ -344,8 +389,9 @@
 **Запрос (`EmployeeActionRequest`):**
 
 - `action` (string; `APPROVE`, `REJECT` или `REQUEST_INFO`) — обязательно
+- `version` (integer) — обязательно; версия из последнего ответа по заявке
 - `decision_reason_code` (string) — необязательно; требуется для `REJECT` и `REQUEST_INFO`; сохраняется в `applications.decision_reason_code`
-- `approved_amount` (number) — необязательно; сохраняется в `applications.approved_amount`
+- `approved_amount` (string, рубли) — необязательно; сохраняется в `applications.approved_amount`
 - `approved_rate` (number) — необязательно; сохраняется в `applications.approved_rate`
 - `comment` (string) — необязательно
 
@@ -358,7 +404,18 @@
 - **401** — токен отсутствует, недействителен или просрочен; тело `ErrorResponse`.
 - **403** — доступ запрещён (нет роли `employee`); тело `ErrorResponse`.
 - **404** — заявка не найдена; тело `ErrorResponse`.
-- **400** — некорректное действие (например, попытка одобрить уже отклонённую заявку); тело `ErrorResponse`:
+- **409** — заявка не в `MANUAL_REVIEW` либо версия устарела; тело `ErrorResponse`.
+- **422** — некорректные поля действия; тело `ErrorResponse`:
   - `error_code` (string)
   - `message` (string)
   - `details` (object или null)
+
+### POST `/employee/applications/{id}/retry-checks` — Повтор проверок
+
+Доступен сотруднику только для заявки `MANUAL_REVIEW`, если последняя попытка содержит `TIMEOUT` или `ERROR`. Повтор запускает новые моки ФНС/БКИ и `evaluate_credit` синхронно, добавляет новые записи проверок, результат и переходы статуса в одной транзакции. Число попыток ФНС вычисляется по проверкам именно этой заявки в БД; сценарий `test.client3@example.com` возвращает таймаут при первой проверке ФНС и успех при повторе.
+
+**Параметры:** `id` (integer; path), `version` (integer; query) — обязательны.
+
+**Успешный ответ — 200:** карточка `ApplicationResponse` с итоговым статусом, версия увеличена.
+
+**Ошибки:** `401` — нет токена; `403` — нет роли сотрудника; `404` — заявка не найдена; `409` — нет технически неуспешной проверки, неверный статус или устаревшая версия.

@@ -26,7 +26,10 @@ def get_products():
         "name": "Кредит на оборотные средства",
         "min_amount": "100000.00",
         "max_amount": "5000000.00",
-        "terms": [6, 12, 24]
+        "terms": [6, 12, 24],
+        "disbursement_count": 1,
+        "term_type": "fixed",
+        "repayment_type": "annuity",
     }]
 
 @router.get("/news")
@@ -55,7 +58,6 @@ def list_applications(
     user: User = Depends(get_current_client),
     db: Session = Depends(get_db),
 ) -> list[ApplicationResponse]:
-    # Сервис должен возвращать только заявки этого user.id
     return application_service.get_client_applications(db, user)
 
 
@@ -75,29 +77,27 @@ def patch_application(
     user: User = Depends(get_current_client),
     db: Session = Depends(get_db),
 ) -> ApplicationResponse:
-    # В сервисе проверить version!
     return application_service.patch_application(db, user, id, request)
 
 
-@router.patch("/applications/{id}/fill", response_model=ApplicationResponse)
+@router.post("/applications/{id}/submit", response_model=ApplicationResponse)
+def submit_application(
+    id: int,
+    version: int,
+    user: User = Depends(get_current_client),
+    db: Session = Depends(get_db),
+) -> ApplicationResponse:
+    return application_service.submit_application(db, user, id, version)
+
+
+@router.post("/applications/{id}/fill", response_model=ApplicationResponse)
 def fill_application(
     id: int,
     request: ApplicationFill,
     user: User = Depends(get_current_client),
     db: Session = Depends(get_db),
 ) -> ApplicationResponse:
-    # Передаем весь request (там есть version и business_data)
     return application_service.fill_application(db, user, id, request)
-
-
-@router.post("/applications/{id}/submit", response_model=ApplicationResponse)
-def submit_application(
-    id: int,
-    version: int, # По ТЗ передаем version
-    user: User = Depends(get_current_client),
-    db: Session = Depends(get_db),
-) -> ApplicationResponse:
-    return application_service.submit_application(db, user, id, version)
 
 
 @router.post("/applications/{id}/sign", response_model=ApplicationResponse)

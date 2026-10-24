@@ -1,8 +1,25 @@
 from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
-from typing import Any, Literal
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from typing import Annotated, Any, Literal
+
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    field_serializer,
+    model_validator,
+)
+
+
+def _require_ruble_string(value: object) -> object:
+    if value is not None and not isinstance(value, str):
+        raise ValueError("Monetary values must be provided as strings in rubles.")
+    return value
+
+
+RubleAmount = Annotated[Decimal, BeforeValidator(_require_ruble_string)]
 
 
 class ProductType(StrEnum):
@@ -23,6 +40,7 @@ class ApplicationStatus(StrEnum):
     MANUAL_REVIEW = "MANUAL_REVIEW"
     APPROVED = "APPROVED"
     REJECTED = "REJECTED"
+    ISSUED = "ISSUED"
 
 
 class EmployeeAction(StrEnum):
@@ -39,39 +57,29 @@ class QueueStatus(StrEnum):
 
 # --- 1. Типизированные финансовые данные (ТЗ п.2) ---
 class Financials(BaseModel):
-    annual_revenue: Decimal | None = Field(default=None, ge=0, max_digits=18, decimal_places=2)
-    annual_expenses: Decimal | None = Field(default=None, ge=0, max_digits=18, decimal_places=2)
+    annual_revenue: RubleAmount | None = Field(
+        default=None, ge=0, max_digits=18, decimal_places=2
+    )
+    annual_expenses: RubleAmount | None = Field(
+        default=None, ge=0, max_digits=18, decimal_places=2
+    )
 
 
 class BusinessData(BaseModel):
-    financials: Financials | None = None
+    financials: Financials = Field(default_factory=Financials)
 
 
 # --- 2. Клиентские схемы (ТЗ п.2) ---
 class ApplicationCreate(BaseModel):
-    # Деньги в JSON как строки
-    model_config = ConfigDict(json_encoders={Decimal: str})
+    model_config = ConfigDict(extra="forbid", json_encoders={Decimal: str})
 
-    # Продукт строго term_loan (по ТЗ)
-    product_type: Literal["term_loan"] = Field(default="term_loan")
-    
-    # Сумма и срок могут быть null для черновика, но если переданы - валидируются
-    requested_amount: Decimal | None = Field(
+    product_type: Literal["term_loan"]
+    requested_amount: RubleAmount | None = Field(
         default=None, ge=100000, le=5000000, max_digits=18, decimal_places=2
     )
     requested_term_months: Literal[6, 12, 24] | None = Field(default=None)
-    
     purpose: str | None = Field(default=None, max_length=500)
-    business_data: BusinessData
-
-    # ВАЖНО: Здесь нет status, score, risk_grade и т.д. (ТЗ п.2)
-
-
-class ApplicationFill(BaseModel):
-    model_config = ConfigDict(json_encoders={Decimal: str})
-    
-    business_data: BusinessData
-    version: int  # Добавлено по ТЗ (п.4)
+    business_data: BusinessData = Field(default_factory=BusinessData)
 
 
 # --- 3. Схемы действий сотрудника (ТЗ п.4) ---
@@ -79,11 +87,11 @@ class EmployeeActionRequest(BaseModel):
     model_config = ConfigDict(json_encoders={Decimal: str})
 
     action: EmployeeAction
-    version: int  # Добавлено по ТЗ
-    missing_fields: list[str] | None = Field(default=None)  # Добавлено по ТЗ
+    version: int = Field(ge=1)
+    missing_fields: list[str] | None = Field(default=None)
     
     decision_reason_code: str | None = Field(default=None, max_length=128)
-    approved_amount: Decimal | None = Field(
+    approved_amount: RubleAmount | None = Field(
         default=None, gt=0, max_digits=18, decimal_places=2
     )
     approved_rate: Decimal | None = Field(
@@ -174,7 +182,12 @@ class ApplicationResponse(BaseModel):
     info_comment: str | None = None
     
     documents: list[ApplicationDocumentResponse] = Field(default_factory=list)
+    checks: list[ApplicationCheckResponse] = Field(default_factory=list)
     status_history: list[ApplicationStatusHistoryResponse] = Field(default_factory=list)
+
+    @field_serializer("business_data")
+    def serialize_business_data(self, value: BusinessData) -> dict[str, Any]:
+        return value.model_dump(mode="json", exclude_none=True)
 
 
 class EmployeeClientSummary(BaseModel):
@@ -200,16 +213,34 @@ class EmployeeApplicationShort(BaseModel):
 class EmployeeApplicationDetail(ApplicationResponse):
     client_id: int
     client: EmployeeClientSummary
-    checks: list[ApplicationCheckResponse] = Field(default_factory=list)
 
 
 class ApplicationPatch(BaseModel):
-    model_config = ConfigDict(json_encoders={Decimal: str})
-    
-    version: int
-    requested_amount: Decimal | None = Field(
+    model_config = ConfigDict(extra="forbid", json_encoders={Decimal: str})
+
+    version: int = Field(ge=1)
+    requested_amount: RubleAmount | None = Field(
         default=None, ge=100000, le=5000000, max_digits=18, decimal_places=2
     )
     requested_term_months: Literal[6, 12, 24] | None = Field(default=None)
     purpose: str | None = Field(default=None, max_length=500)
-    business_data: BusinessData | None = None
+    business_data: BusinessData = Field(default_factory=BusinessData)
+
+    @model_validator(mode="after")
+    def require_application_changes(self) -> "ApplicationPatch":
+        if not self.model_fields_set.difference({"version"}):
+            raise ValueError("At least one application field must be provided.")
+        return self
+
+
+class ApplicationFill(BaseModel):
+    model_config = ConfigDict(extra="forbid", json_encoders={Decimal: str})
+
+    version: int = Field(ge=1)
+    business_data: BusinessData
+
+    @model_validator(mode="after")
+    def require_financial_information(self) -> "ApplicationFill":
+        if not self.business_data.financials.model_dump(exclude_none=True):
+            raise ValueError("At least one financial field must be provided.")
+        return self

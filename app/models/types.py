@@ -8,4 +8,5 @@ APPLICATION_STATUSES = {
     "MANUAL_REVIEW",
     "APPROVED",
     "REJECTED",
+    "ISSUED",
 }

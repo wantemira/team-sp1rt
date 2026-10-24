@@ -1,7 +1,4 @@
 # team-sp1rt
-<<<<<<< Updated upstream
-```
-=======
 
 Backend API for the Alfa Smart Credit client cabinet and employee review flow.
 The React frontend is in `frontend/`; API contracts and data design are in
@@ -10,7 +7,6 @@ The React frontend is in `frontend/`; API contracts and data design are in
 ## Backend architecture
 
 ```text
->>>>>>> Stashed changes
 app/
 ├── main.py                         # FastAPI app and router registration
 ├── api/
@@ -26,10 +22,14 @@ app/
 ├── db/
 │   ├── base.py
 │   └── session.py
+├── integrations/                   # Server-selected FNS/BKI development mocks
 ├── models/                         # SQLAlchemy models, one per DB table
 ├── repositories/                   # Database queries
 ├── schemas/                        # Pydantic request/response DTOs
-└── services/                       # Application and auth business logic
+└── services/
+    ├── application_service.py      # Atomic synchronous application workflow
+    ├── credit_evaluation.py        # Replaceable MVP scoring placeholder
+    └── auth_service.py
 
 migrations/                         # Alembic schema migrations
 tests/                              # API tests using an isolated SQLite DB
@@ -41,6 +41,9 @@ HTTP and dependency injection, services enforce workflow and ownership rules,
 repositories encapsulate queries, and Pydantic schemas define the API contract.
 Only existing users can sign in; public registration is not exposed. Database
 accounts and their `clients`/`employees` profiles are provisioned separately.
+Submission, filling missing financial data, and technical retries run external
+mocks and the scoring placeholder synchronously, saving checks, result, status,
+and history in one database transaction. No worker or message broker is used.
 
 ## Run locally with Docker
 
