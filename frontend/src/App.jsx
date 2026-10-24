@@ -1,37 +1,88 @@
-import { useState } from 'react'
-import { AppShell, PageHeader } from './components/layout/AppShell'
-import { Button, Card, InlineAlert, StatusBadge } from './components/ui'
-import { ApplicationActions, ApplicationsTable, DocumentList, DocumentUpload, OfferSummary, StatusTimeline } from './components/credit'
-import { ApplicationDemo } from './demo/ApplicationDemo'
-import { DashboardDemo } from './demo/DashboardDemo'
-import { EmployeeDemo } from './demo/EmployeeDemo'
-import { ComponentsDemo } from './demo/ComponentsDemo'
-import { demoApplications } from './demo/fixtures'
-const views = ['dashboard', 'application', 'employee', 'components', 'applications', 'documents', 'detail']
-export default function App() {
-  const [view, setView] = useState(() => {
-    const requested = new URLSearchParams(window.location.search).get('view')
-    return views.includes(requested) ? requested : 'dashboard'
-  })
-  const [selectedId, setSelectedId] = useState(1042)
-  const [notice, setNotice] = useState('')
-  const [employeeSection, setEmployeeSection] = useState('queue')
-  function navigate(next) { setNotice(''); setView(next) }
-  function open(id) { setSelectedId(id); navigate('detail') }
-  const application = demoApplications.find(item => item.id === selectedId) || demoApplications[0]
-  const employee = view === 'employee'
-  const active = employee ? employeeSection : view === 'detail' ? 'applications' : view
-  return <>
-    <div className="demo-toolbar"><span>Концепт · Демонстрационные данные · API не подключен</span><nav aria-label="Примеры экранов">{[['dashboard', 'Клиент'], ['application', 'Новая заявка'], ['employee', 'Сотрудник'], ['components', 'Компоненты']].map(([key, label]) => <button type="button" key={key} aria-pressed={view === key} onClick={() => navigate(key)}>{label}</button>)}</nav></div>
-    <AppShell role={employee ? 'employee' : 'client'} activeItem={active} userName={employee ? 'Сергей Волков' : 'Александр Иванов'} onNavigate={next => { if (employee) setEmployeeSection(next); else navigate(next) }}>
-      {notice && <InlineAlert>{notice}</InlineAlert>}
-      {view === 'dashboard' && <DashboardDemo onNavigate={navigate} onOpen={open} />}
-      {view === 'application' && <ApplicationDemo />}
-      {view === 'employee' && <EmployeeDemo historyOnly={employeeSection === 'history'} />}
-      {view === 'components' && <ComponentsDemo />}
-      {view === 'applications' && <><PageHeader title="Мои заявки" description="Черновики, текущие и завершенные обращения" action={<Button onClick={() => navigate('application')}>Новая заявка</Button>} /><Card><ApplicationsTable applications={demoApplications} onOpen={open} onCreate={() => navigate('application')} /></Card></>}
-      {view === 'detail' && <><PageHeader title={`Заявка №${application.id}`} action={<StatusBadge status={application.status} />} /><div className="form-layout"><Card title="Ход рассмотрения"><StatusTimeline history={application.status_history} /><ApplicationActions nextActions={application.next_actions} onAction={action => setNotice(`Демонстрация: обработчик ${action} для заявки №${application.id}. Подключите API и соответствующий экран подтверждения.`)} /></Card><OfferSummary amount={application.status === 'APPROVED' ? application.approved_amount : application.requested_amount} term={application.requested_term_months} rate={application.approved_rate} approved={application.status === 'APPROVED'} /></div></>}
-      {view === 'documents' && <><PageHeader title="Документы" description="Компоненты защищенной загрузки и скачивания" /><Card><div className="stack"><DocumentUpload onFile={file => setNotice(`Демонстрация: выбран файл «${file.name}». Загрузка на сервер не выполнялась.`)} /><DocumentList documents={[]} onDownload={() => {}} /></div></Card></>}
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import LoginPage from './pages/LoginPage';
+
+// Компоненты-заглушки для кабинетов (пока просто текст)
+import { AppShell } from './components/layout/AppShell';
+import { ComponentsDemo } from './demo/ComponentsDemo'; 
+
+// Защитник маршрутов
+function ProtectedRoute({ children, allowedRole }) {
+  const { user } = useAuth();
+  
+  if (!user) return <Navigate to="/login" replace />;
+  if (allowedRole && user.role !== allowedRole) {
+    // Если клиент пытается зайти к сотруднику — выкидываем его в его кабинет
+    return <Navigate to={user.role === 'client' ? '/client' : '/employee/applications'} replace />;
+  }
+  return children;
+}
+
+// Заглушка для Главной клиента
+function ClientDashboard() {
+  const { user, logout } = useAuth();
+  return (
+    <AppShell role="client" activeItem="dashboard" userName={user.name || 'Клиент'} onNavigate={() => {}}>
+      <h1>Кабинет клиента</h1>
+      <p>Добро пожаловать, {user.email}</p>
+      <button onClick={logout}>Выйти</button>
     </AppShell>
-  </>
+  );
+}
+
+// Заглушка для Кабинета сотрудника
+function EmployeeDashboard() {
+  const { user, logout } = useAuth();
+  return (
+    <AppShell role="employee" activeItem="applications" userName={user.name || 'Сотрудник'} onNavigate={() => {}}>
+      <h1>Кабинет сотрудника</h1>
+      <p>Очередь заявок</p>
+      <button onClick={logout}>Выйти</button>
+    </AppShell>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          {/* Публичный маршрут */}
+          <Route path="/login" element={<LoginPage />} />
+
+          {/* Маршруты клиента */}
+          <Route path="/client/*" element={
+            <ProtectedRoute allowedRole="client">
+              <Routes>
+                <Route path="/" element={<ClientDashboard />} />
+                {/* Сюда позже добавим /applications, /applications/new и т.д. */}
+              </Routes>
+            </ProtectedRoute>
+          } />
+
+          {/* Маршруты сотрудника */}
+          <Route path="/employee/*" element={
+            <ProtectedRoute allowedRole="employee">
+              <Routes>
+                <Route path="/applications" element={<EmployeeDashboard />} />
+                {/* Сюда позже добавим /applications/:id */}
+              </Routes>
+            </ProtectedRoute>
+          } />
+
+          {/* Страница разработки (сохраняем демо по ТЗ) */}
+          <Route path="/dev" element={
+            <div style={{ padding: 20 }}>
+              <h1>Страница разработки</h1>
+              <ComponentsDemo />
+            </div>
+          } />
+
+          {/* Редиректы по умолчанию */}
+          <Route path="/" element={<Navigate to="/login" replace />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
+  );
 }
