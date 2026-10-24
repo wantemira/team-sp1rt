@@ -20,12 +20,12 @@ export default function ClientDashboard() {
           {mockApplications.length > 0 ? (
             <>
               <p>У вас есть активные заявки: <strong>{mockApplications.length}</strong></p>
-              <Button onClick={() => navigate('/client/applications')}>Перейти к списку</Button>
+              <Button style={{ marginTop: '16px' }}  onClick={() => navigate('/client/applications')}>Перейти к списку</Button>
             </>
           ) : (
             <>
               <p>У вас пока нет активных заявок.</p>
-              <Button onClick={() => navigate('/client/applications/new')}>Создать заявку</Button>
+              <Button style={{ marginTop: '16px' }}  onClick={() => navigate('/client/applications/new')}>Создать заявку</Button>
             </>
           )}
         </Card>

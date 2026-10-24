@@ -1,18 +1,27 @@
+import { useState, useEffect } from 'react';
 import { PageHeader } from '../../components/layout/AppShell';
 import { Card, Button } from '../../components/ui';
 import { ApplicationsTable } from '../../components/credit';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { mockApplications } from '../../lib/mockData';
-
-// Временные данные, пока нет API (потом заменим на запрос)
-const mockApps = [
-  { id: 1042, status: 'DRAFT', requested_amount: '1500000.00', created_at: new Date().toISOString() }
-];
+import { mockBackend } from '../../api/mockBackend';
 
 export default function ClientApplications() {
   const navigate = useNavigate();
   const { logout } = useAuth();
+  
+  const [applications, setApplications] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Загружаем заявки из эмулятора при открытии страницы
+    mockBackend.getAll().then(data => {
+      // Сортируем: новые сверху
+      const sorted = data.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      setApplications(sorted);
+      setLoading(false);
+    });
+  }, []);
 
   return (
     <>
@@ -25,11 +34,17 @@ export default function ClientApplications() {
         </div>} 
       />
       <Card>
-        <ApplicationsTable 
-            applications={mockApplications}
+        {loading ? (
+          <div>Загрузка...</div>
+        ) : applications.length === 0 ? (
+          <div>У вас пока нет заявок.</div>
+        ) : (
+          <ApplicationsTable 
+            applications={applications} 
             onOpen={(id) => navigate(`/client/applications/${id}`)} 
             onCreate={() => navigate('/client/applications/new')} 
-        />
+          />
+        )}
       </Card>
     </>
   );

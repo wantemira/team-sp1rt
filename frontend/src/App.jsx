@@ -7,10 +7,11 @@ import { ComponentsDemo } from './demo/ComponentsDemo';
 import { Card } from './components/ui';
 
 // Импорт страниц клиента
-import ClientDashboard from './pages/client/ClientDashboard';
+import ClientDashboard from './pages/client/ClientDashBoard';
 import ClientApplications from './pages/client/ClientApplications';
 import ClientApplicationNew from './pages/client/ClientApplicationNew';
 import ClientApplicationDetail from './pages/client/ClientApplicationDetail';
+import ClientProducts from './pages/client/ClientProducts';
 
 function ProtectedRoute({ children, allowedRole }) {
   const { user } = useAuth();
@@ -33,6 +34,7 @@ function ClientLayout() {
   
   // Определяем активный пункт меню по URL
   let activeItem = 'dashboard';
+  if (location.pathname.includes('/products')) activeItem = 'application';
   if (location.pathname.includes('/applications')) activeItem = 'applications';
   if (location.pathname.includes('/documents')) activeItem = 'documents';
 
@@ -40,7 +42,7 @@ function ClientLayout() {
   const pathMap = {
     'dashboard': '/client',
     'applications': '/client/applications',
-    'application': '/client/applications/new', // Кнопка "Продукты"
+    'application': '/client/products', // Кнопка "Продукты"
     'documents': '/client/documents',
   };
 
@@ -57,6 +59,7 @@ function ClientLayout() {
     >
       <Routes>
         <Route path="/" element={<ClientDashboard />} />
+        <Route path="/products" element={<ClientProducts />} />
         <Route path="/applications" element={<ClientApplications />} />
         <Route path="/applications/new" element={<ClientApplicationNew />} />
         <Route path="/applications/:id" element={<ClientApplicationDetail />} />
