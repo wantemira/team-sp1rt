@@ -90,3 +90,29 @@ small { font-size: 12px; }
   font-size: 20px;
   color: #111827;
 }
+
+/* Стили для нижней панели кнопок формы */
+.form-actions {
+  display: flex;
+  justify-content: space-between; /* Разносит кнопки по краям */
+  align-items: center;
+  margin-top: 24px;
+}
+
+/* Делаем красную кнопку более современной */
+.form-actions button[type="submit"] {
+  background-color: #e11d48;
+  color: white;
+  padding: 12px 32px;
+  border-radius: 8px;
+  font-weight: bold;
+  border: none;
+}
+
+.form-actions button[type="button"] {
+  background: transparent;
+  color: #6b7280;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+}

@@ -2,8 +2,21 @@ import { useState } from 'react'
 import { Button, Card, Field, InlineAlert } from '../ui'
 import { PRODUCT } from '../../lib/contracts'
 import { normalizeMoneyInput } from '../../lib/format'
-export function Stepper({ steps, current }) {
-  return <ol className="stepper" aria-label="Этапы заявки">{steps.map((label, index) => <li key={label} aria-current={index === current ? 'step' : undefined}><span>{index + 1}</span>{label}</li>)}</ol>
+export function Stepper({ steps, current, onStepClick }) {
+  return (
+    <ol className="stepper" aria-label="Этапы заявки">
+      {steps.map((label, index) => (
+        <li 
+          key={label} 
+          aria-current={index === current ? 'step' : undefined}
+          onClick={() => onStepClick && onStepClick(index)}
+          style={{ cursor: onStepClick ? 'pointer' : 'default', opacity: index > current && !onStepClick ? 0.5 : 1 }}
+        >
+          <span>{index + 1}</span>{label}
+        </li>
+      ))}
+    </ol>
+  )
 }
 /** Controlled values. onSubmit/onSave receive an API-shaped payload, money stays a string. */
 export function ApplicationForm({ values, onChange, onSubmit, onSave, busy = false, errors = {}, error }) {

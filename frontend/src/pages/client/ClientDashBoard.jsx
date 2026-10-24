@@ -82,7 +82,7 @@ export default function ClientDashboard() {
         </div>
         <Button 
           onClick={() => navigate('/client/applications/new')}
-          style={{ backgroundColor: '#e11d48', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '8px', fontWeight: 'bold' }}
+          style={{ backgroundColor: '#dc2626', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '8px', fontWeight: 'bold' }}
         >
           Подать заявку
         </Button>
@@ -120,7 +120,7 @@ export default function ClientDashboard() {
         <div className="clean-card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
             <h3 style={{ margin: 0 }}>Мои заявки</h3>
-            <button type="button" className="text-link" style={{ background: 'none', border: 'none', color: '#e11d48', cursor: 'pointer' }} onClick={() => navigate('/client/applications')}>
+            <button type="button" className="text-link" style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer' }} onClick={() => navigate('/client/applications')}>
               Все заявки →
             </button>
           </div>
@@ -138,7 +138,7 @@ export default function ClientDashboard() {
                 <tr key={app.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
                   <td style={{ padding: '16px 0' }}>
                     <strong style={{ display: 'block', color: '#111827', marginBottom: '4px' }}>Оборотный кредит</strong>
-                    <span style={{ color: '#e11d48', fontSize: '12px', cursor: 'pointer' }} onClick={() => navigate(`/client/applications/${app.id}`)}>
+                    <span style={{ color: '#dc2626', fontSize: '12px', cursor: 'pointer' }} onClick={() => navigate(`/client/applications/${app.id}`)}>
                       Открыть заявку →
                     </span>
                   </td>
@@ -177,8 +177,8 @@ export default function ClientDashboard() {
                 
                 {latestApp.status === 'NEEDS_INFO' && (
                   <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                    <span style={{ color: '#e11d48' }}>●</span>
-                    <span style={{ fontSize: '14px', color: '#e11d48', fontWeight: 'bold' }}>Нужны сведения о выручке</span>
+                    <span style={{ color: '#dc2626' }}>●</span>
+                    <span style={{ fontSize: '14px', color: '#dc2626', fontWeight: 'bold' }}>Нужны сведения о выручке</span>
                   </div>
                 )}
                 
@@ -190,7 +190,7 @@ export default function ClientDashboard() {
 
               <Button 
                 onClick={() => navigate(`/client/applications/${latestApp.id}`)}
-                style={{ width: '100%', backgroundColor: '#e11d48', color: 'white', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: 'bold' }}
+                style={{ width: '100%', backgroundColor: '#dc2626', color: 'white', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: 'bold' }}
               >
                 {latestApp.status === 'NEEDS_INFO' ? 'Дополнить заявку' : 'Открыть заявку'}
               </Button>
