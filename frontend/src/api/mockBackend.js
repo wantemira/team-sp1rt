@@ -106,11 +106,31 @@ export const mockBackend = {
 
   // --- МЕТОДЫ ДЛЯ СОТРУДНИКА ---
   
-  employeeList: async (status = 'ALL') => {
+   employeeList: async (status = 'QUEUE') => {
     await delay(400);
-    const apps = getDB().apps;
-    if (status === 'ALL') return apps.filter(a => a.status !== 'DRAFT'); // Сотрудник не видит черновики
-    return apps.filter(a => a.status === status);
+    let apps = getDB().apps;
+    
+    // Добавляем данные скоринга
+    apps = apps.map(app => ({
+      ...app,
+      company_name: app.company_name || 'ООО Вектор',
+      scoring: app.scoring || 78,
+      rating: app.rating || 'B',
+      recommendation: app.recommendation || 'одобрить',
+    }));
+
+    if (status === 'HISTORY') {
+      // История: Одобренные и Отклоненные
+      return apps.filter(a => ['APPROVED', 'REJECTED', 'ISSUED'].includes(a.status));
+    }
+    
+    if (status === 'REVIEW') {
+      // На рассмотрении: Ручная проверка + Ждут данные
+      return apps.filter(a => ['MANUAL_REVIEW', 'NEEDS_INFO'].includes(a.status));
+    }
+
+    // Очередь (по умолчанию): Только ручная проверка
+    return apps.filter(a => ['MANUAL_REVIEW', 'CHECKING'].includes(a.status));
   },
 
   employeeGet: async (id) => {

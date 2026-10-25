@@ -1,23 +1,20 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { PageHeader } from '../../components/layout/AppShell';
 import { Card, Button, StatusBadge, InlineAlert, Field } from '../../components/ui';
 import { StatusTimeline } from '../../components/credit';
 import { mockBackend } from '../../api/mockBackend';
 
-export default function EmployeeApplicationDetail() {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  
+export default function EmployeeApplicationDetail({ id, onActionComplete }) {
   const [app, setApp] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [activeTab, setActiveTab] = useState('info'); // Вкладки: info, checks, history
   
   const [comment, setComment] = useState('');
   const [approvedAmount, setApprovedAmount] = useState('');
 
   const fetchApp = useCallback(async () => {
+    setLoading(true);
     try {
       const data = await mockBackend.employeeGet(id);
       setApp(data);
@@ -45,10 +42,10 @@ export default function EmployeeApplicationDetail() {
         missing_fields: actionType === 'request_info' ? ['annual_revenue'] : undefined
       };
       
-      const updated = await mockBackend.employeeAction(app.id, actionData);
-      setApp(updated);
-      setComment('');
+      await mockBackend.employeeAction(app.id, actionData);
       alert('Действие успешно выполнено!');
+      if (onActionComplete) onActionComplete(); // Обновляем список слева
+      fetchApp(); // Обновляем карточку справа
     } catch (err) {
       setError(err.message);
     } finally {
@@ -56,75 +53,99 @@ export default function EmployeeApplicationDetail() {
     }
   };
 
-  if (loading) return <div style={{ padding: 20 }}>Загрузка...</div>;
-  if (!app) return <InlineAlert type="error">{error || 'Заявка не найдена'}</InlineAlert>;
+  if (loading) return <Card>Загрузка...</Card>;
+  if (!app) return <InlineAlert tone="danger">{error || 'Заявка не найдена'}</InlineAlert>;
 
-  // Проверяем, можно ли принимать решения по этой заявке
   const canMakeDecision = ['MANUAL_REVIEW', 'CHECKING'].includes(app.status);
 
   return (
-    <>
-      <PageHeader 
-        title={`Проверка заявки №${app.id}`} 
-        action={<div style={{ display: 'flex', gap: '10px' }}>
-          <Button variant="secondary" onClick={() => navigate('/employee/applications')}>К очереди</Button>
+    <Card style={{ padding: 0, overflow: 'hidden' }}>
+      {/* Шапка карточки */}
+      <div style={{ padding: '24px', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h2 style={{ margin: '0 0 8px 0', fontSize: '24px' }}>{app.company_name} · №{app.id}</h2>
           <StatusBadge status={app.status} />
-        </div>} 
-      />
-      
-      {error && <InlineAlert type="error" style={{ marginBottom: 20 }}>{error}</InlineAlert>}
-
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '20px' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <Card title="Данные заявки">
-            <p><strong>Сумма:</strong> {app.requested_amount} ₽</p>
-            <p><strong>Срок:</strong> {app.requested_term_months} мес.</p>
-            <p><strong>Цель:</strong> {app.purpose || 'Не указана'}</p>
-          </Card>
-
-          <Card title="История">
-            <StatusTimeline history={app.status_history} />
-          </Card>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          {/* Если заявка требует решения, показываем панель */}
-          {canMakeDecision ? (
-            <Card title="Решение по заявке">
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <Field 
-                  as="textarea" 
-                  label="Комментарий (для клиента)" 
-                  value={comment} 
-                  onChange={e => setComment(e.target.value)} 
-                  rows={3}
-                />
-                
-                <Field 
-                  label="Одобренная сумма" 
-                  value={approvedAmount} 
-                  onChange={e => setApprovedAmount(e.target.value)} 
-                />
-                <Button onClick={() => handleAction('approve')} disabled={isProcessing} style={{ backgroundColor: 'var(--color-success)' }}>
-                  Одобрить
-                </Button>
-                
-                <Button onClick={() => handleAction('request_info')} disabled={isProcessing} variant="secondary">
-                  Запросить данные
-                </Button>
-                
-                <Button onClick={() => handleAction('reject')} disabled={isProcessing} style={{ backgroundColor: 'var(--color-danger)' }}>
-                  Отклонить
-                </Button>
-              </div>
-            </Card>
-          ) : (
-            <Card title="Статус">
-              <p>Заявка находится в статусе <strong>{app.status}</strong>. Действия недоступны (клиент должен выполнить свои шаги).</p>
-            </Card>
-          )}
         </div>
       </div>
-    </>
+
+      {/* Табы */}
+      <div style={{ display: 'flex', gap: '24px', padding: '0 24px', borderBottom: '1px solid #f3f4f6' }}>
+        {['info', 'checks', 'history'].map(tab => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            style={{
+              padding: '16px 0', background: 'none', border: 'none', cursor: 'pointer',
+              fontWeight: activeTab === tab ? 'bold' : 'normal',
+              color: activeTab === tab ? '#dc2626' : '#6b7280',
+              borderBottom: activeTab === tab ? '2px solid #dc2626' : '2px solid transparent'
+            }}
+          >
+            {tab === 'info' && 'Общая информация'}
+            {tab === 'checks' && 'Проверки'}
+            {tab === 'history' && 'История'}
+          </button>
+        ))}
+      </div>
+
+      {/* Контент табов */}
+      <div style={{ padding: '24px' }}>
+        {error && <InlineAlert tone="danger" style={{ marginBottom: 20 }}>{error}</InlineAlert>}
+
+        {activeTab === 'info' && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px', marginBottom: '24px' }}>
+            <div>
+              <p style={{ margin: '0 0 4px 0', color: '#6b7280', fontSize: '13px' }}>Запрошено</p>
+              <strong style={{ fontSize: '20px' }}>{new Intl.NumberFormat('ru-RU').format(app.requested_amount)} ₽</strong>
+            </div>
+            <div>
+              <p style={{ margin: '0 0 4px 0', color: '#6b7280', fontSize: '13px' }}>Срок</p>
+              <strong style={{ fontSize: '20px' }}>{app.requested_term_months} месяцев</strong>
+            </div>
+            <div>
+              <p style={{ margin: '0 0 4px 0', color: '#6b7280', fontSize: '13px' }}>Скоринг</p>
+              <strong style={{ fontSize: '20px' }}>{app.scoring} / 100</strong>
+            </div>
+            
+            <div style={{ gridColumn: '1 / -1', marginTop: '16px', padding: '16px', backgroundColor: '#ecfdf5', borderRadius: '8px', color: '#047857' }}>
+              <strong style={{ display: 'block', marginBottom: '8px' }}>✓ Компания действительна</strong>
+              <span style={{ fontSize: '14px' }}>Сведений о банкротстве не найдено</span>
+            </div>
+            
+            <div style={{ gridColumn: '1 / -1', padding: '16px', backgroundColor: '#f0fdf4', borderRadius: '8px', border: '1px solid #bbf7d0', color: '#166534' }}>
+              <strong style={{ display: 'block', marginBottom: '4px' }}>Рекомендация системы: одобрить</strong>
+              <span style={{ fontSize: '14px' }}>Высокий рейтинг и уровень платежеспособности сотрудника</span>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'checks' && (
+          <div>
+            <p>Результаты проверок ФНС/БКИ...</p>
+          </div>
+        )}
+
+        {activeTab === 'history' && (
+          <StatusTimeline history={app.status_history} />
+        )}
+      </div>
+
+      {/* Панель действий */}
+      {canMakeDecision && (
+        <div style={{ padding: '24px', backgroundColor: '#f9fafb', borderTop: '1px solid #f3f4f6' }}>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <Button onClick={() => handleAction('approve')} disabled={isProcessing} style={{ flex: 1, backgroundColor: '#dc2626', color: 'white' }}>
+              Одобрить
+            </Button>
+            <Button onClick={() => handleAction('request_info')} disabled={isProcessing} variant="secondary" style={{ flex: 1 }}>
+              Запросить сведения
+            </Button>
+            <Button onClick={() => handleAction('reject')} disabled={isProcessing} variant="secondary" style={{ flex: 1, color: '#dc2626' }}>
+              Отказать
+            </Button>
+          </div>
+        </div>
+      )}
+    </Card>
   );
 }

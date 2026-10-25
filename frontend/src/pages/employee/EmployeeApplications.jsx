@@ -1,72 +1,117 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { PageHeader } from '../../components/layout/AppShell';
-import { Card, Button } from '../../components/ui';
+import { useSearchParams } from 'react-router-dom';
+import { Card } from '../../components/ui';
 import { mockBackend } from '../../api/mockBackend';
+import EmployeeApplicationDetail from './EmployeeApplicationDetail';
+import { PageHeader } from '../../components/layout/AppShell'; // Для красивого заголовка
 
 export default function EmployeeApplications() {
-  const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const statusFilter = searchParams.get('status') || 'ALL';
+  const [searchParams] = useSearchParams();
+  
+  // Получаем статус из URL. Если пусто, то по умолчанию 'QUEUE'
+  const statusFilter = searchParams.get('status') || 'QUEUE';
 
   const [apps, setApps] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setLoading(true);
-    // Имитируем загрузку по фильтру. В реальном API здесь был бы Promise.all если ALL.
     mockBackend.employeeList(statusFilter).then(data => {
-      setApps(data.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
+      const sorted = data.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      setApps(sorted);
+      
+      // Автовыбор первой заявки
+      if (sorted.length > 0) {
+        // Если текущая выбранная заявка есть в новом списке, оставляем её, иначе берем первую
+        const currentExists = sorted.find(a => a.id === selectedId);
+        setSelectedId(currentExists ? selectedId : sorted[0].id);
+      } else {
+        setSelectedId(null);
+      }
       setLoading(false);
     });
   }, [statusFilter]);
 
-  const handleFilterChange = (status) => {
-    if (status === 'ALL') setSearchParams({});
-    else setSearchParams({ status });
-  };
+  // Определяем заголовок для страницы
+  let pageTitle = "Очередь заявок";
+  let pageDesc = "Требуют ручной проверки";
+  if (statusFilter === 'REVIEW') {
+    pageTitle = "На рассмотрении";
+    pageDesc = "Заявки на проверке и ожидающие ответа от клиента";
+  } else if (statusFilter === 'HISTORY') {
+    pageTitle = "История решений";
+    pageDesc = "Одобренные и отклоненные заявки";
+  }
 
   return (
-    <>
-      <PageHeader title="Очередь заявок" description="Заявки клиентов, требующие внимания" />
-      
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-        <Button variant={statusFilter === 'ALL' ? 'primary' : 'secondary'} onClick={() => handleFilterChange('ALL')}>Все активные</Button>
-        <Button variant={statusFilter === 'MANUAL_REVIEW' ? 'primary' : 'secondary'} onClick={() => handleFilterChange('MANUAL_REVIEW')}>На проверке</Button>
-        <Button variant={statusFilter === 'NEEDS_INFO' ? 'primary' : 'secondary'} onClick={() => handleFilterChange('NEEDS_INFO')}>Ждут клиента</Button>
-        <Button variant={statusFilter === 'APPROVED' ? 'primary' : 'secondary'} onClick={() => handleFilterChange('APPROVED')}>Одобренные</Button>
-      </div>
+    <div>
+      <PageHeader title={pageTitle} description={pageDesc} />
 
-      <Card>
-        {loading ? <div>Загрузка...</div> : apps.length === 0 ? (
-          <div>Нет заявок с таким статусом.</div>
-        ) : (
-          <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid #eee' }}>
-                <th style={{ padding: '10px' }}>ID</th>
-                <th style={{ padding: '10px' }}>Сумма</th>
-                <th style={{ padding: '10px' }}>Статус</th>
-                <th style={{ padding: '10px' }}>Дата</th>
-                <th style={{ padding: '10px' }}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {apps.map(app => (
-                <tr key={app.id} style={{ borderBottom: '1px solid #eee' }}>
-                  <td style={{ padding: '10px' }}>№{app.id}</td>
-                  <td style={{ padding: '10px' }}>{app.requested_amount} ₽</td>
-                  <td style={{ padding: '10px' }}>{app.status}</td>
-                  <td style={{ padding: '10px' }}>{new Date(app.created_at).toLocaleDateString()}</td>
-                  <td style={{ padding: '10px', textAlign: 'right' }}>
-                    <Button variant="secondary" onClick={() => navigate(`/employee/applications/${app.id}`)}>Открыть</Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </Card>
-    </>
+      <div style={{ display: 'grid', gridTemplateColumns: '350px 1fr', gap: '24px', alignItems: 'start', marginTop: '24px' }}>
+        
+        {/* ЛЕВАЯ КОЛОНКА: СПИСОК ЗАЯВОК */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {loading ? <div style={{ padding: '20px' }}>Загрузка...</div> : apps.map(app => (
+            <div 
+              key={app.id}
+              onClick={() => setSelectedId(app.id)}
+              style={{
+                padding: '16px', borderRadius: '12px', cursor: 'pointer',
+                backgroundColor: selectedId === app.id ? '#fff1f2' : 'white',
+                border: selectedId === app.id ? '2px solid #e11d48' : '1px solid #f3f4f6',
+                boxShadow: '0 2px 10px rgba(0,0,0,0.02)',
+                transition: 'all 0.2s'
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                <strong style={{ color: '#111827' }}>{app.company_name}</strong>
+                {app.status === 'NEEDS_INFO' && (
+                  <span style={{ fontSize: '11px', backgroundColor: '#fef3c7', color: '#b45309', padding: '2px 6px', borderRadius: '4px' }}>Ждет данных</span>
+                )}
+                {app.status === 'APPROVED' && (
+                  <span style={{ fontSize: '11px', backgroundColor: '#ecfdf5', color: '#047857', padding: '2px 6px', borderRadius: '4px' }}>Одобрено</span>
+                )}
+                {app.status === 'REJECTED' && (
+                  <span style={{ fontSize: '11px', backgroundColor: '#fef2f2', color: '#b91c1c', padding: '2px 6px', borderRadius: '4px' }}>Отклонено</span>
+                )}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#6b7280' }}>
+                <span>{new Intl.NumberFormat('ru-RU').format(app.requested_amount)} ₽</span>
+                <span>№{app.id}</span>
+              </div>
+            </div>
+          ))}
+          
+          {apps.length === 0 && !loading && (
+            <Card>
+              <div style={{ padding: '30px 20px', textAlign: 'center', color: '#6b7280' }}>
+                В этой категории пока нет заявок.
+              </div>
+            </Card>
+          )}
+        </div>
+
+        {/* ПРАВАЯ КОЛОНКА: КАРТОЧКА ЗАЯВКИ */}
+        <div>
+          {selectedId ? (
+            <EmployeeApplicationDetail 
+              id={selectedId} 
+              onActionComplete={() => {
+                // Принудительно обновляем список после действия
+                mockBackend.employeeList(statusFilter).then(data => setApps(data));
+              }} 
+            />
+          ) : (
+            <Card>
+              <div style={{ padding: '60px 20px', textAlign: 'center', color: '#6b7280' }}>
+                Выберите заявку из списка слева
+              </div>
+            </Card>
+          )}
+        </div>
+        
+      </div>
+    </div>
   );
 }

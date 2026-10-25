@@ -61,26 +61,26 @@ function EmployeeLayout() {
   const location = useLocation();
   const { user, logout } = useAuth();
   
+  // Определяем активный пункт меню
   let activeItem = 'queue';
-  if (location.search.includes('status=MANUAL_REVIEW')) activeItem = 'review';
+  if (location.search.includes('status=REVIEW')) activeItem = 'review';
+  if (location.search.includes('status=HISTORY')) activeItem = 'history';
 
   const pathMap = {
-    'queue': '/employee/applications',
-    'review': '/employee/applications?status=MANUAL_REVIEW',
-    'history': '/employee/applications' // Отдельный архив не нужен по ТЗ
+    'queue': '/employee/applications', // Очередь
+    'review': '/employee/applications?status=REVIEW', // На рассмотрении
+    'history': '/employee/applications?status=HISTORY' // История
   };
 
   return (
     <AppShell role="employee" activeItem={activeItem} userName={user?.name || user?.email} onLogout={logout} onNavigate={(item) => navigate(pathMap[item] || '/employee/applications')}>
       <Routes>
         <Route path="/applications" element={<EmployeeApplications />} />
-        <Route path="/applications/:id" element={<EmployeeApplicationDetail />} />
         <Route path="*" element={<Navigate to="/employee/applications" replace />} />
       </Routes>
     </AppShell>
   );
 }
-
 export default function App() {
   return (
     <AuthProvider>
