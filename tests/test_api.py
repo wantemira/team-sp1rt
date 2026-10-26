@@ -145,7 +145,7 @@ def test_seed_test_users_is_idempotent_and_accounts_can_login(
     client: TestClient,
 ) -> None:
     with TestSession() as db:
-        assert seed_test_users(db, "local-test-password") == (3, 2)
+        assert seed_test_users(db, "local-test-password") == (4, 2)
         assert seed_test_users(db, "local-test-password") == (0, 0)
         db.commit()
 
@@ -346,7 +346,7 @@ def test_missing_financial_information_can_be_filled_and_rechecked(
         db.commit()
 
     token = bearer_token(
-        client, "test.client3@example.com", "local-test-password"
+        client, "test.client1@example.com", "local-test-password"
     )
     headers = {"Authorization": f"Bearer {token}"}
     created = client.post(
@@ -372,7 +372,7 @@ def test_missing_financial_information_can_be_filled_and_rechecked(
         "BKI",
     }
     assert [check["status"] for check in submitted.json()["checks"]] == [
-        "TIMEOUT",
+        "SUCCESS",
         "SUCCESS",
     ]
 
@@ -727,7 +727,7 @@ def test_known_stop_factor_blocks_manual_approval(
     assert blocked.status_code == 409
 
 
-def test_demo_client_two_is_rejected_by_placeholder_score(client: TestClient) -> None:
+def test_demo_client_two_is_rejected_by_stop_factor(client: TestClient) -> None:
     with TestSession() as db:
         seed_test_users(db, "local-test-password")
         db.commit()
@@ -747,13 +747,15 @@ def test_demo_client_two_is_rejected_by_placeholder_score(client: TestClient) ->
     )
     assert submitted.status_code == 200
     assert submitted.json()["status"] == "REJECTED"
-    assert submitted.json()["score"] == 20
-    assert submitted.json()["decision_reason_code"] == "SCORE_BELOW_APPROVAL_THRESHOLD"
-    assert submitted.json()["checks"][0]["response_data"] == {
+    assert submitted.json()["score"] is None
+    assert submitted.json()["decision_reason_code"] == "BUSINESS_TOO_YOUNG"
+    assert {key: submitted.json()["checks"][0]["response_data"][key]
+            for key in ("is_active", "business_age_months")} == {
         "is_active": True,
         "business_age_months": 6,
     }
-    assert submitted.json()["checks"][1]["response_data"] == {
+    assert {key: submitted.json()["checks"][1]["response_data"][key]
+            for key in ("current_overdue_days", "monthly_debt_payments")} == {
         "current_overdue_days": 10,
         "monthly_debt_payments": "0.00",
     }
@@ -780,22 +782,24 @@ def test_demo_client_one_is_approved(client: TestClient) -> None:
     assert submitted.status_code == 200
     assert submitted.json()["status"] == "APPROVED"
     assert submitted.json()["next_actions"] == ["SIGN"]
-    assert submitted.json()["score"] == 95
-    assert submitted.json()["scoring_result"]["model"] == "mvp_demo_thresholds_v1"
-    assert submitted.json()["scoring_result"]["score"] == 95
+    assert submitted.json()["score"] == 85
+    assert submitted.json()["scoring_result"]["model"] == "cash-flow-demo-v1"
+    assert submitted.json()["scoring_result"]["score"] == 85
     assert submitted.json()["scoring_result"]["reason_code"] == (
-        "SCORE_MEETS_APPROVAL_THRESHOLD"
+        "AFFORDABLE_COUNTER_OFFER"
     )
     with TestSession() as db:
         stored = db.get(Application, created.json()["id"])
         assert stored is not None
         assert stored.scoring_result == submitted.json()["scoring_result"]
     assert submitted.json()["requested_amount"] == "1500000.00"
-    assert submitted.json()["checks"][0]["response_data"] == {
+    assert {key: submitted.json()["checks"][0]["response_data"][key]
+            for key in ("is_active", "business_age_months")} == {
         "is_active": True,
         "business_age_months": 36,
     }
-    assert submitted.json()["checks"][1]["response_data"] == {
+    assert {key: submitted.json()["checks"][1]["response_data"][key]
+            for key in ("current_overdue_days", "monthly_debt_payments")} == {
         "current_overdue_days": 0,
         "monthly_debt_payments": "50000.00",
     }
@@ -834,7 +838,7 @@ def test_demo_client_three_can_retry_fns_timeout(client: TestClient) -> None:
     )
     assert retry.status_code == 200
     assert retry.json()["status"] == "APPROVED"
-    assert retry.json()["score"] == 95
+    assert retry.json()["score"] == 85
     assert retry.json()["version"] == submitted.json()["version"] + 1
     assert [check["status"] for check in retry.json()["checks"]] == [
         "TIMEOUT",
@@ -1012,3 +1016,47 @@ def test_document_upload_and_download_require_authorization(client: TestClient) 
 
     unauthorized = client.get(document["file_url"])
     assert unauthorized.status_code == 401
+
+
+def test_demo_ip_counter_offer_is_persisted_and_accepted_once(client: TestClient) -> None:
+    from decimal import Decimal
+    with TestSession() as db:
+        seed_test_users(db, "local-test-password")
+        db.commit()
+    headers = {"Authorization": f"Bearer {bearer_token(client, 'demo.ip@example.com', 'local-test-password')}"}
+    profile = client.get("/api/v1/auth/me", headers=headers).json()["client"]
+    assert profile["client_type"] == "INDIVIDUAL" and len(profile["inn"]) == 12
+    created = client.post("/api/v1/applications", headers=headers, json={
+        "product_type": "term_loan", "requested_amount": "1000000.00", "requested_term_months": 24,
+    }).json()
+    path = f"/api/v1/applications/{created['id']}"
+    response = client.post(f"{path}/submit?version={created['version']}", headers=headers)
+    assert response.status_code == 200
+    approved = response.json()
+    assert approved["status"] == "APPROVED"
+    assert Decimal("550000") < Decimal(approved["approved_amount"]) < Decimal("650000")
+    offer = approved["scoring_result"]["offer"]
+    assert Decimal(offer["amount"]) == Decimal(approved["approved_amount"])
+    assert Decimal(offer["dscr"]) >= Decimal("1.35")
+    assert client.get(path, headers=headers).json()["scoring_result"] == approved["scoring_result"]
+    assert client.post(f"{path}/sign?version={created['version']}", headers=headers).status_code == 409
+    accepted = client.post(f"{path}/sign?version={approved['version']}", headers=headers)
+    assert accepted.status_code == 200
+    assert accepted.json()["status"] == "ISSUED"
+    assert accepted.json()["approved_amount"] == approved["approved_amount"]
+    assert accepted.json()["scoring_result"]["offer"] == offer
+    assert client.post(f"{path}/sign?version={accepted.json()['version']}", headers=headers).status_code == 409
+
+
+def test_approval_without_terms_cannot_be_signed(client: TestClient) -> None:
+    with TestSession() as db:
+        _, profile = create_client_user(db)
+        application = Application(client_id=profile.id, product_type="term_loan", status="APPROVED",
+                                  requested_amount="1000000", requested_term_months=24, business_data={})
+        db.add(application)
+        db.commit()
+        application_id = application.id
+    headers = {"Authorization": f"Bearer {bearer_token(client)}"}
+    response = client.post(f"/api/v1/applications/{application_id}/sign?version=1", headers=headers)
+    assert response.status_code == 409
+    assert client.get(f"/api/v1/applications/{application_id}", headers=headers).json()["status"] == "APPROVED"

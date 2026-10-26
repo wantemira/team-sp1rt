@@ -373,13 +373,11 @@ def _run_credit_checks(
         application.score = evaluation.score
         application.decision_reason_code = evaluation.reason_code
         application.scoring_result = scoring_result
+        application.approved_amount = evaluation.approved_amount
+        application.approved_rate = evaluation.approved_rate
+        application.risk_grade = evaluation.risk_grade
         if evaluation.status == "NEEDS_INFO":
-            financials = application.business_data.get("financials") or {}
-            application.missing_fields = (
-                ["business_data.financials.annual_revenue"]
-                if not any(value is not None for value in financials.values())
-                else []
-            )
+            application.missing_fields = list(evaluation.missing_fields)
             application.info_comment = "Provide the requested financial information."
         else:
             application.missing_fields = []
@@ -436,6 +434,9 @@ def sign_application(
             status_code=409,
             detail="Only approved applications can be issued.",
         )
+    if (application.approved_amount is None or application.approved_amount <= 0
+            or application.approved_rate is None):
+        raise HTTPException(status_code=409, detail="Approved loan terms are missing.")
     application.status = "ISSUED"
     issued_at = datetime.now(timezone.utc)
     application.signed_at = issued_at

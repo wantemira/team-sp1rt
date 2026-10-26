@@ -28,7 +28,7 @@ app/
 ├── schemas/                        # Pydantic request/response DTOs
 └── services/
     ├── application_service.py      # Atomic synchronous application workflow
-    ├── credit_evaluation.py        # Replaceable MVP scoring placeholder
+    ├── credit_evaluation.py        # Explainable cash-flow scoring and offers
     └── auth_service.py
 
 migrations/                         # Alembic schema migrations
@@ -42,7 +42,7 @@ repositories encapsulate queries, and Pydantic schemas define the API contract.
 Only existing users can sign in; public registration is not exposed. Database
 accounts and their `clients`/`employees` profiles are provisioned separately.
 Submission, filling missing financial data, and technical retries run external
-mocks and the scoring placeholder synchronously, saving checks, result, status,
+mocks and cash-flow scoring synchronously, saving checks, result, status,
 and history in one database transaction. No worker or message broker is used.
 
 ## Run locally with Docker
@@ -59,9 +59,9 @@ and history in one database transaction. No worker or message broker is used.
    The API container runs `alembic upgrade head` before starting Uvicorn.
    The API is available at `http://localhost:8000`; Swagger UI is at
    `http://localhost:8000/docs`.
-3. Docker Compose creates five local test accounts at startup:
+3. Docker Compose creates six local test accounts at startup:
    `test.client1@example.com`, `test.client2@example.com`,
-   `test.client3@example.com`, `test.employee1@example.com`, and
+   `test.client3@example.com`, `demo.ip@example.com`, `test.employee1@example.com`, and
    `test.employee2@example.com`. The shared password is the value of
    `TEST_USERS_PASSWORD` in `.env` (the example file supplies a local-only
    password). There is intentionally no public registration route.
@@ -103,3 +103,11 @@ python -m pytest
 
 Tests use an isolated in-memory SQLite database and do not connect to the
 development or production database.
+
+## Credit demo
+
+Sign in as `demo.ip@example.com` with `TEST_USERS_PASSWORD`. Request
+`1000000.00` rubles for 24 months. Server-selected synthetic FNS/BKI data
+produce an affordable counter-offer around 610,000 rubles, with the payment,
+DSCR, rate and explanation saved in `scoring_result.offer`. See
+[CREDIT_POLICY.md](./CREDIT_POLICY.md) for the demonstration rules.
