@@ -1,196 +1,123 @@
-# team-sp1rt
+# Кредитный кабинет — team-sp1rt
 
-Единый прототип кредитного кабинета: React/Vite для клиента и сотрудника,
-FastAPI для кредитного процесса, PostgreSQL для хранения. Актуальные ветки
-`API` и `frontend-manager` объединены в `main` с сохранением истории.
-Внешние проверки ФНС/БКИ, подписание и выдача смоделированы;
-финансовые показатели синтетические, сумма и ставка рассчитываются сервером.
+Прототип оборотного кредитования: кабинеты клиента и сотрудника, расчёт ставки
+и доступной суммы, встречное предложение, согласие и история решения.
+ФНС/БКИ, подписание и выдача смоделированы. Данные синтетические.
 
-## Материалы для проверки
+## Запуск
 
-- [Архитектура и границы компонентов](./docs/ARCHITECTURE.md)
-- [Диаграмма состояний и разрешённые действия](./docs/APPLICATION_STATES.md)
-- [ER-схема, модель данных и миграции](./DB.md)
-- [Описание API](./Api.md), [пояснения backend](./BACKEND_API_GUIDE.md),
-  [структура модулей](./BACKEND_STRUCTURE.md)
-- [OpenAPI-снимок сервера](./api.yaml); живые `/openapi.json` и `/docs`
-- [Коллекция Postman и пошаговые сценарии](./docs/TEST_SCENARIOS.md)
-- [Кредитная политика и допущения](./CREDIT_POLICY.md)
-- [Закреплённые зависимости и обновление](./docs/DEPENDENCIES.md)
-- [Сторонние компоненты, лицензии и смоделированные интеграции](./THIRD_PARTY_NOTICES.md)
-- [Фронтенд и браузерные проверки](./frontend/README.md)
+Нужны Docker Engine и Docker Compose v2 с поддержкой `up --wait`.
 
-Для общего запуска нужны Docker Engine и Docker Compose v2 с поддержкой
-`up --wait`. Отдельная установка Python/Node/PostgreSQL не нужна. Образы
-закреплены digest; рабочие и транзитивные библиотеки Python — точными версиями,
-frontend — package-lock.json. Тестовые зависимости Python устанавливаются
-отдельно из requirements-dev.txt.
+1. Скопируйте `.env.example` в `.env`.
+2. Задайте `POSTGRES_PASSWORD`, `JWT_SECRET` и `TEST_USERS_PASSWORD`.
+3. Запустите систему:
 
-## Backend architecture
-
-```text
-app/
-├── main.py                         # FastAPI app and router registration
-├── api/
-│   ├── dependencies.py             # JWT authentication and role checks
-│   └── routes/
-│       ├── auth.py
-│       ├── applications.py
-│       └── employee_applications.py
-├── core/
-│   ├── config.py                   # Required environment configuration
-│   ├── errors.py                   # Shared API error responses
-│   └── security.py                 # Password verification and JWT creation
-├── db/
-│   ├── base.py
-│   └── session.py
-├── integrations/                   # Server-selected FNS/BKI development mocks
-├── models/                         # SQLAlchemy models, one per DB table
-├── repositories/                   # Database queries
-├── schemas/                        # Pydantic request/response DTOs
-└── services/
-    ├── application_service.py      # Atomic synchronous application workflow
-    ├── credit_evaluation.py        # Explainable cash-flow scoring and offers
-    └── auth_service.py
-
-migrations/                         # Alembic schema migrations
-tests/                              # API tests using an isolated SQLite DB
-frontend/                           # React/Vite client and employee cabinets
-```
-
-Request flow: **route → service → repository/model → database**. Routes handle
-HTTP and dependency injection, services enforce workflow and ownership rules,
-repositories encapsulate queries, and Pydantic schemas define the API contract.
-Only existing users can sign in; public registration is not exposed. Database
-accounts and their `clients`/`employees` profiles are provisioned separately.
-Submission, filling missing financial data, and technical retries run external
-mocks and cash-flow scoring synchronously, saving checks, result, status,
-and history in one database transaction. No worker or message broker is used.
-
-## Run locally with Docker
-
-1. Copy `.env.example` to `.env` and set unique local values for
-   `POSTGRES_PASSWORD`, `JWT_SECRET`, and `TEST_USERS_PASSWORD`. Do not use the
-   example values outside local development.
-2. Start PostgreSQL, API and frontend/Nginx:
-
-   ```powershell
+   ```bash
    docker compose up --build -d --wait
    ```
 
-   The API container runs `alembic upgrade head` before starting Uvicorn.
-   Open the application at `http://localhost:8080`. Nginx serves the built
-   frontend and forwards `/api/` to `api:8000` in the Compose network. Services
-   wait for database/API readiness. Swagger UI is at `http://localhost:8000/docs`.
-   `WEB_PORT`, `API_PORT` and `DB_PORT` override the default host ports
-   8080, 8000 and 5432. Published ports bind to the local machine.
-3. Docker Compose creates seven local test accounts at startup:
-   `test.client1@example.com`, `test.client2@example.com`,
-   `test.client3@example.com`, `demo.ip@example.com`, `demo.review@example.com`, `test.employee1@example.com`, and
-   `test.employee2@example.com`. The shared password is the value of
-   `TEST_USERS_PASSWORD` in `.env` (the example file supplies a local-only
-   password). There is intentionally no public registration route.
-   Real client and employee accounts must still be provisioned through the
-   trusted administrative process.
+| Адрес | Назначение |
+|---|---|
+| http://localhost:8080 | Кабинеты клиента и сотрудника |
+| http://localhost:8000/docs | Swagger |
+| http://localhost:8000/openapi.json | Точная схема API |
 
-Test account seeding is enabled only in the Docker Compose configuration. It is
-idempotent: existing seed accounts are preserved and are not reset to the
-configured password. Do not use these accounts or the example password in a
-production environment.
+Compose запускает PostgreSQL 16, API и Nginx с фронтендом. Перед стартом API
+применяются миграции и создаются тестовые аккаунты. Образы закреплены по digest,
+библиотеки Python — точными версиями, зависимости фронтенда — package-lock.json.
 
-Uploaded documents are stored in the `uploaded_documents` Docker volume. Their
-download URLs require a valid JWT and are accessible only to the owning client
-or an employee.
+| Переменная `.env` | Назначение |
+|---|---|
+| POSTGRES_PASSWORD | Пароль БД, обязательно |
+| JWT_SECRET | Секрет подписи токенов, обязательно |
+| TEST_USERS_PASSWORD | Начальный пароль тестовых аккаунтов, обязательно |
+| WEB_PORT / API_PORT / DB_PORT | Порты, по умолчанию 8080 / 8000 / 5432 |
 
-## Restart and stop
+Порты доступны только на локальной машине. БД и документы хранятся в отдельных
+именованных томах. Скачивание документов требует токен владельца или сотрудника.
 
 ```bash
 docker compose restart
 docker compose down
-# Resume using the same .env and volumes:
-docker compose up --build -d --wait
+# Повторный запуск с теми же настройками и томами:
+docker compose up -d --wait
 ```
 
-Database records and document files persist in named volumes. `down -v`
-deletes those volumes and is only appropriate for discarding a test stand.
+`docker compose down -v` удаляет БД и документы.
 
-## Run locally without Docker
+## Тестовые аккаунты
 
-Use Python 3.12.15 (see `.python-version`). The reference environment is the Linux Docker image:
+Пароль — `TEST_USERS_PASSWORD`. Повторное создание аккаунтов сохраняет
+существующие пароли. Публичной регистрации нет.
 
-```powershell
+| Аккаунт | Сценарий |
+|---|---|
+| demo.ip@example.com | Встречное предложение |
+| demo.review@example.com | Ручное рассмотрение |
+| test.client1@example.com | Запрос выручки и полное одобрение при достаточном потоке |
+| test.client2@example.com | Отказ по стоп-фактору |
+| test.client3@example.com | Таймаут ФНС, повтор проверки и дозаполнение |
+| test.employee1@example.com, test.employee2@example.com | Кабинет сотрудника |
+
+## Основной сценарий
+
+1. Войдите как `demo.ip@example.com`.
+2. Выберите оборотный кредит: 1 000 000 ₽ на 24 месяца. ИНН берётся из профиля.
+3. Сохраните черновик и отправьте заявку.
+4. Проверьте встречное предложение около 609 641 ₽, ставку, платёж и объяснение DSCR.
+5. Нажмите «Согласен с предложением» и подтвердите условия.
+6. Перезагрузите страницу: согласованные условия и результат сохраняются.
+
+Для ручного решения отправьте такой же запрос от `demo.review@example.com`.
+Сотрудник видит факторы, выручку, расходы, денежный поток и обязательства;
+может одобрить, отказать или запросить сведения с комментарием.
+
+## Устройство
+
+React/Vite → Nginx → FastAPI → PostgreSQL. Маршруты проверяют права,
+сервисы выполняют кредитный процесс, SQLAlchemy сохраняет данные.
+Расчёт ставки и доступной суммы находится в `app/services/credit_math.py`.
+
+Проверки выполняются синхронно. Их результаты, решение и история сохраняются
+одной транзакцией. Версия заявки защищает от конкурирующих изменений;
+устаревшее действие возвращает 409. CHECKING виден в истории, ответ содержит
+итоговый статус. Клиент принимает сохранённое предложение.
+
+## Разработка без Docker
+
+Нужны Python 3.12.15 и PostgreSQL 16. Подготовьте `.env` по примеру и добавьте
+`DATABASE_URL`, например `postgresql+psycopg2://user:password@localhost:5432/credit`.
+`JWT_SECRET` и `TEST_USERS_PASSWORD` также должны быть заданы.
+
+```bash
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+source .venv/bin/activate
 python -m pip install -r requirements.txt
-$env:DATABASE_URL = "postgresql+psycopg2://user:password@localhost:5432/credit"
-$env:JWT_SECRET = "a-long-random-local-secret"
 alembic upgrade head
+python -m app.seed_test_users
 uvicorn app.main:app --reload
 ```
 
-Set `UPLOAD_DIR` to a persistent local directory if the default
-`storage/uploads` is unsuitable. To add synthetic accounts without Compose,
-set `SEED_TEST_USERS=true` and `TEST_USERS_PASSWORD`, then run
-`python -m app.seed_test_users` after migrations.
+В PowerShell активируйте среду командой `.\.venv\Scripts\Activate.ps1`.
+Для создания тестовых аккаунтов нужен `SEED_TEST_USERS=true`.
+Файлы сохраняются в `storage/uploads`; другой каталог задаёт `UPLOAD_DIR`.
+[Запуск фронтенда](frontend/README.md).
 
-In another terminal run the frontend from this same checkout:
+## Проверки
+
+В активированной среде Python:
 
 ```bash
-cd frontend
-npm ci
-npm run dev
-```
-
-The development UI is at `http://localhost:5173`. Vite forwards `/api` to
-`http://localhost:8000`; set `CREDIT_API_TARGET` for a different API address.
-Frontend requirements and browser tests are in [frontend/README.md](./frontend/README.md).
-
-## Tests
-
-```powershell
 python -m pip install -r requirements-dev.txt
+python -m pip check
 python -m pytest
 ```
 
-Tests use an isolated in-memory SQLite database and do not connect to the
-development or production database.
-
-Optional PostgreSQL checks:
-
-```powershell
-$env:CREDIT_TEST_POSTGRES_URL = "postgresql+psycopg2://test_user:test_password@localhost:5432/credit_test"
-python -m pytest -m postgres
-```
-
-Use a dedicated test database with permission to create schemas. These checks
-create unique temporary schemas, apply every Alembic migration, run `alembic check`,
-and verify concurrent signing and competing employee decisions. Their schemas
-are removed afterward. Without this variable the PostgreSQL tests are skipped.
-The merged application is checked on PostgreSQL 16, matching the Compose configuration.
-
-## Credit demo
-
-Sign in as `demo.ip@example.com` with `TEST_USERS_PASSWORD`. Request
-`1000000.00` rubles for 24 months. Server-selected synthetic FNS/BKI data
-produce an affordable counter-offer around 610,000 rubles, with the payment,
-DSCR, rate and explanation saved in `scoring_result.offer`. See
-[CREDIT_POLICY.md](./CREDIT_POLICY.md) for the demonstration rules.
-
-For manual review, sign in as `demo.review@example.com` and request
-`1000000.00` rubles for 24 months. The real demonstration calculation returns
-a borderline score: current debt is absent, but prior delays and the industry
-reduce the score. Sign in as `test.employee1@example.com` to approve, reject,
-or request information. No scoring result is forced for this profile.
-Run the idempotent seed again to add the account to an existing local database;
-passwords of existing accounts are preserved.
-
-The main demo: create the request, view the counter-offer, click
-«Согласен с предложением», confirm it, then reload the page. The agreed
-conditions remain saved. `test.client2@example.com` demonstrates a stop-factor
-rejection. `test.client3@example.com` demonstrates an initial FNS timeout,
-an employee retry and requested financial information.
-
-## Frontend checks
+Основные API-тесты используют изолированную SQLite. Для проверки миграций
+и конкурирующих действий задайте `CREDIT_TEST_POSTGRES_URL` на отдельную БД
+PostgreSQL с правом создания схем, затем выполните `python -m pytest -m postgres`.
+Тесты создают временные схемы и удаляют их после проверки. Без переменной
+два PostgreSQL-теста пропускаются.
 
 ```bash
 npm ci --prefix frontend
@@ -199,23 +126,16 @@ npm test --prefix frontend
 npm run build --prefix frontend
 ```
 
-Browser tests require a separately seeded test API and create synthetic
-applications/documents. See [frontend/README.md](./frontend/README.md) for the
-password and browser configuration. Do not run them against valuable data.
+Проверено: 106 API-тестов с PostgreSQL, 19 модульных тестов фронтенда,
+17 браузерных сценариев; коллекция — 27 запросов и 57 утверждений.
+Отдельно проверено сохранение заявок, условий, истории и байтов документа
+после остановки и запуска с сохранением томов.
 
-## Проверка объединённой версии
+## Документация
 
-Общий Docker-стенд проверен на Python 3.12 / PostgreSQL 16: 106 API-тестов,
-19 модульных тестов фронтенда, линтер и сборка, 17 браузерных сценариев через
-production Nginx. После `down` и повторного `up` с сохранением томов проверены
-черновик, принятые условия, история выдачи и исходные байты документа больше
-1 МиБ. Редкие конфликты в части браузерных тестов используют подмену ответов;
-основной путь, документы и ручное одобрение проходят через работающий API.
-
-
-После фиксации зависимостей повторно проверены сборка закреплённых образов,
-готовность трёх сервисов, `pip check` и 106 API-тестов с PostgreSQL. Рабочий
-образ не содержит pytest/httpx. Коллекция Postman прошла через тот же Nginx:
-27 запросов, 57 утверждений, без ошибок. Схемы Mermaid проверены парсингом
-и отображением в Chromium. Эти проверки дополняют предыдущий браузерный прогон;
-после изменений только документации браузерные тесты повторно не запускались.
+- [Архитектура](docs/ARCHITECTURE.md), [состояния](docs/APPLICATION_STATES.md), [модель БД](DB.md).
+- [Описание API](Api.md), [OpenAPI](api.yaml), [маршруты](BACKEND_API_GUIDE.md), [модули сервера](BACKEND_STRUCTURE.md).
+- [Коллекция запросов и сценарии](docs/TEST_SCENARIOS.md).
+- [Кредитная политика](CREDIT_POLICY.md), [версии зависимостей](docs/DEPENDENCIES.md).
+- [Фронтенд и браузерные тесты](frontend/README.md).
+- [Сторонние компоненты, лицензии и моки](THIRD_PARTY_NOTICES.md).
