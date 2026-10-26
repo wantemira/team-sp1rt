@@ -144,3 +144,17 @@ textarea.field__control { resize: vertical; }
 .products-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: 24px; }
 .products-grid .offer-details > div { flex-direction: column; gap: 8px; }
 .products-grid .offer-details dd { white-space: normal; }
+
+.financial-basis { padding: 18px; border: 1px solid var(--color-line); border-radius: 20px; }
+.financial-basis__header h3 { font-size: 15px; }
+.financial-basis__header p { margin-top: 6px; font-size: 12px; }
+.financial-basis__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; margin-top: 18px; }
+.financial-basis h4 { font-size: 12px; font-weight: 600; }
+.financial-basis dl { margin: 8px 0 0; }
+.financial-basis dl > div { padding: 10px 0; border-bottom: 1px solid var(--color-line); }
+.financial-basis dt { font-size: 12px; line-height: 1.5; color: var(--color-muted); }
+.financial-basis dd { margin: 5px 0 0; font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.financial-basis dd small { display: block; margin-top: 3px; font-size: 11px; font-weight: 400; color: var(--color-muted); }
+.financial-basis__note { font-size: 11px; line-height: 1.6; color: var(--color-muted); margin-top: 10px; }
+.financial-basis__warning { margin-top: 12px; padding: 12px; border-radius: 12px; background: var(--color-amber-bg); color: var(--color-amber); font-size: 12px; line-height: 1.5; }
+@media (max-width: 1100px) { .financial-basis__grid { grid-template-columns: 1fr; gap: 18px; } }
