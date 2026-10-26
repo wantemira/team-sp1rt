@@ -1,49 +1,26 @@
-import { useState, useEffect } from 'react';
-import { PageHeader } from '../../components/layout/AppShell';
-import { Card, Button } from '../../components/ui';
-import { ApplicationsTable } from '../../components/credit';
-import { useNavigate } from 'react-router-dom';
-import { mockBackend } from '../../api/mockBackend';
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../../context/AuthContext'
+import { PageHeader } from '../../components/layout/AppShell'
+import { Button, Card, InlineAlert, LoadingState } from '../../components/ui'
+import { ApplicationsTable } from '../../components/credit'
 
 export default function ClientApplications() {
-  const navigate = useNavigate();
-  
-  const [applications, setApplications] = useState([]);
-  const [loading, setLoading] = useState(true);
-
+  const { api } = useAuth()
+  const navigate = useNavigate()
+  const [applications, setApplications] = useState(null)
+  const [error, setError] = useState('')
+  const [attempt, setAttempt] = useState(0)
   useEffect(() => {
-    mockBackend.getAll().then(data => {
-      const sorted = data.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-      setApplications(sorted);
-      setLoading(false);
-    });
-  }, []);
-
-  return (
-    <>
-      <PageHeader 
-        title="Мои заявки" 
-        description="Черновики, текущие и завершенные обращения" 
-        action={
-          // Ведем на страницу продуктов (или на 1-й шаг визарда, если страница продуктов удалена)
-          <Button onClick={() => navigate('/client/products')}>
-            Новая заявка
-          </Button>
-        } 
-      />
-      <Card>
-        {loading ? (
-          <div>Загрузка...</div>
-        ) : applications.length === 0 ? (
-          <div style={{ padding: '20px 0', color: '#6b7280' }}>У вас пока нет заявок.</div>
-        ) : (
-          <ApplicationsTable 
-            applications={applications} 
-            onOpen={(id) => navigate(`/client/applications/${id}`)} 
-            onCreate={() => navigate('/client/products')} // <--- Тоже ведем на продукты
-          />
-        )}
-      </Card>
-    </>
-  );
+    const controller = new AbortController()
+    api.applications.list(controller.signal).then(data => {
+      setApplications([...data].sort((a, b) => b.id - a.id)); setError('')
+    }).catch(err => { if (err.name !== 'AbortError') setError(err.message) })
+    return () => controller.abort()
+  }, [api, attempt])
+  return <>
+    <PageHeader title="Мои заявки" description="Черновики, текущие и завершённые обращения" action={<Button onClick={() => navigate('/client/products')}>Новая заявка</Button>} />
+    <Card>{error ? <InlineAlert tone="danger">{error}<Button onClick={() => setAttempt(value => value + 1)}>Повторить</Button></InlineAlert> :
+      applications ? <ApplicationsTable applications={applications} onOpen={id => navigate(`/client/applications/${id}`)} onCreate={() => navigate('/client/applications/new')} /> : <LoadingState />}</Card>
+  </>
 }

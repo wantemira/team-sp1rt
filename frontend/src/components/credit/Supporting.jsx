@@ -1,5 +1,5 @@
 import { useId } from 'react'
-import { Card, Field } from '../ui'
+import { Card } from '../ui'
 import { formatDate, formatMoney, formatRate } from '../../lib/format'
 import { PRODUCT } from '../../lib/contracts'
 export function OfferSummary({ amount, term, rate, approved = false }) {
