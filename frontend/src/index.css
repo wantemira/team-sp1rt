@@ -1,0 +1,149 @@
+@import './styles/tokens.css';
+@import './styles/components.css';
+@import './styles/layout.css';
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; color: var(--color-ink); background: var(--color-bg); }
+button, input, select, textarea { font: inherit; min-width: 0; }
+button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; outline-offset: 4px; }
+button { cursor: pointer; color: inherit; }
+button:disabled { cursor: not-allowed; }
+a { color: var(--color-red-hover); }
+:focus-visible { outline: 3px solid var(--color-red); }
+h1, h2, h3, p { margin: 0; }
+small { font-size: 12px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.stack { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.stack--compact { gap: 12px; }
+.row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.muted { color: var(--color-muted); font-size: 13px; line-height: 1.6; }
+.section-heading { font-size: 21px; line-height: 1.4; font-weight: 700; }
+.text-link { border: 0; padding: 0; background: transparent; color: var(--color-red-hover); font-weight: 600; font-size: 13px; text-align: left; }
+.spacer { flex: 1; }
+.full-width { width: 100%; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
+
+.metric-card {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.metric-card__value {
+  font-size: 28px;
+  font-weight: 700;
+  margin: 0;
+  color: #111827;
+}
+
+.hero-banner {
+  background: #fff1f0;
+  border-radius: 16px;
+  padding: 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 24px;
+}
+
+.hero-banner h2 {
+  margin: 0 0 8px 0;
+  font-size: 24px;
+  color: #111827;
+}
+
+.hero-banner p {
+  margin: 0;
+  color: #6b7280;
+}
+
+.bottom-layout {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 24px;
+  margin-top: 24px;
+  align-items: start;
+}
+
+.clean-card {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+}
+
+.clean-card h3 {
+  margin-top: 0;
+  margin-bottom: 20px;
+  font-size: 20px;
+  color: #111827;
+}
+
+/* Стили для нижней панели кнопок формы */
+.form-actions {
+  display: flex;
+  justify-content: space-between; /* Разносит кнопки по краям */
+  align-items: center;
+  margin-top: 24px;
+}
+
+/* Делаем красную кнопку более современной */
+.form-actions button[type="submit"] {
+  background-color: #dc2626;
+  color: white;
+  padding: 12px 32px;
+  border-radius: 8px;
+  font-weight: bold;
+  border: none;
+}
+
+.form-actions button[type="button"] {
+  background: transparent;
+  color: #6b7280;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+}
+
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: #ffffff;
+  background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%236b7280%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 15px;
+  color: #111827;
+  outline: none;
+  width: 100%;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  cursor: pointer;
+}
+
+/* select:focus {
+  border-color: #dc2626; /* Наш красный цвет */
+  /* box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.1); Красное свечение */
+/* } */
+
+
+/* Делаем обычные инпуты тоже красивее (если они еще где-то не стилизованы) */
+input[type="text"], input[type="number"], input[type="email"], input[type="password"] {
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 12px 14px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+input[type="text"]:focus, input[type="email"]:focus, input[type="password"]:focus {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.1);
+}
