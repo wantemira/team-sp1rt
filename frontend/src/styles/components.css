@@ -140,3 +140,7 @@ textarea.field__control { resize: vertical; }
 .offer-details dd { margin: 0; font-weight: 600; white-space: nowrap; }
 .credit-checks { padding-left: 20px; line-height: 1.7; margin-bottom: 20px; }
 @media (max-width: 600px) { .offer-details > div { flex-direction: column; gap: 6px; } }
+
+.products-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: 24px; }
+.products-grid .offer-details > div { flex-direction: column; gap: 8px; }
+.products-grid .offer-details dd { white-space: normal; }

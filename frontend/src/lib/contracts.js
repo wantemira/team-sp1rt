@@ -1,3 +1,4 @@
+// Параметры примеров UI-kit; рабочие формы загружают ограничения из /products.
 export const PRODUCT = Object.freeze({
   product_type: 'term_loan', name: 'Кредит на оборотные средства',
   min_amount: '100000.00', max_amount: '5000000.00', terms: [6, 12, 24],

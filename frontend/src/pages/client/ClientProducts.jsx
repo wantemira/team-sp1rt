@@ -1,45 +1,25 @@
-import { PageHeader } from '../../components/layout/AppShell';
-import { Button } from '../../components/ui';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom'
+import { useProducts } from '../../hooks/useProducts'
+import { PageHeader } from '../../components/layout/AppShell'
+import { Button, Card, EmptyState, InlineAlert, LoadingState } from '../../components/ui'
+import { formatMoney } from '../../lib/format'
 
 export default function ClientProducts() {
-  const navigate = useNavigate();
-
-  return (
-    <div>
-      <PageHeader 
-        title="Продукты" 
-        description="Финансовые решения для вашего бизнеса" 
-      />
-      
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px', marginTop: '24px' }}>
-        
-        <div className="clean-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-          <div>
-            <h3 style={{ margin: '0 0 12px 0', fontSize: '20px', color: '#111827' }}>
-              Кредит на оборотные средства
-            </h3>
-            <p style={{ color: '#6b7280', marginBottom: '20px', lineHeight: '1.5' }}>
-              Финансирование текущей деятельности: закупка товаров, оплата аренды, выплата зарплат и другие операционные расходы.
-            </p>
-            <ul style={{ paddingLeft: '20px', margin: '0 0 24px 0', color: '#374151', lineHeight: '1.8' }}>
-              <li>Сумма: от 100 000 до 5 000 000 ₽</li>
-              <li>Срок: 6, 12 или 24 месяца</li>
-              <li>Решение за 1 день</li>
-            </ul>
+  const navigate = useNavigate()
+  const { products, loading, error, reload } = useProducts()
+  return <>
+    <PageHeader title="Продукты" description="Финансирование текущей деятельности вашего бизнеса" />
+    {loading ? <LoadingState label="Загружаем условия кредита…" /> : error ?
+      <InlineAlert tone="danger">{error}<Button onClick={reload}>Повторить</Button></InlineAlert> : !products.length ?
+        <EmptyState title="Сейчас нет доступных продуктов" description="Попробуйте обновить список позже." actionLabel="Обновить" onAction={reload} /> :
+        <div className="products-grid">{products.map(product => <Card key={product.id} title={product.name}>
+          <div className="stack"><p className="muted">На закупку товаров, аренду и другие операционные расходы.</p>
+            <dl className="offer-details">
+              <div><dt>Сумма</dt><dd>{formatMoney(product.min_amount)} – {formatMoney(product.max_amount)}</dd></div>
+              <div><dt>Сроки</dt><dd>{product.terms.join(' / ')} мес.</dd></div>
+            </dl>
+            <Button onClick={() => navigate('/client/applications/new')}>Оформить заявку</Button>
           </div>
-          
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <Button 
-              onClick={() => navigate('/client/applications/new')}
-              style={{ backgroundColor: '#dc2626', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '8px', fontWeight: 'bold' }}
-            >
-              Оформить заявку
-            </Button>
-          </div>
-        </div>
-        
-      </div>
-    </div>
-  );
+        </Card>)}</div>}
+  </>
 }
