@@ -14,7 +14,7 @@ class FNSResult:
     is_active: bool | None
     business_age_months: int | None
     registration_date: date | None = None
-    okved: str = "47.11"
+    okved: str | None = "47.11"
     annual_revenue: str | None = None
     annual_operating_expenses: str | None = "3000000.00"
 
@@ -22,7 +22,7 @@ class FNSResult:
         return {
             "is_active": self.is_active,
             "business_age_months": self.business_age_months,
-            "registration_date": self.registration_date.isoformat() if self.registration_date else None,
+            "registration_date": self.registration_date.isoformat() if isinstance(self.registration_date, date) else self.registration_date,
             "okved": self.okved,
             "annual_revenue": self.annual_revenue,
             "annual_operating_expenses": self.annual_operating_expenses,

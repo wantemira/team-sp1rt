@@ -31,6 +31,7 @@ from app.schemas.applications import (
     QueueStatus,
 )
 from app.services.credit_evaluation import evaluate_credit, evaluate_manual_offer
+from app.services.source_data import business_too_young, saved_sources, source_problem
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +122,7 @@ def _next_actions(application: Application, role: str) -> list[str]:
     if role == "employee" and application.status == "MANUAL_REVIEW":
         return (
             ["RETRY_CHECKS"]
-            if application.decision_reason_code == "EXTERNAL_CHECK_UNAVAILABLE"
+            if not _required_checks_succeeded(_latest_checks(application))
             else ["APPROVE", "REJECT", "REQUEST_INFO"]
         )
     return []
@@ -295,18 +296,11 @@ def retry_checks(
             status_code=409,
             detail="Checks can only be retried for applications in MANUAL_REVIEW.",
         )
-    if application.decision_reason_code != "EXTERNAL_CHECK_UNAVAILABLE":
-        raise HTTPException(
-            status_code=409,
-            detail="Checks can only be retried after a technical check failure.",
-        )
     latest_checks = _latest_checks(application)
-    if not any(
-        check.status in {"TIMEOUT", "ERROR"} for check in latest_checks.values()
-    ):
+    if _required_checks_succeeded(latest_checks):
         raise HTTPException(
             status_code=409,
-            detail="Application has no failed external checks to retry.",
+            detail="Последние проверки уже успешны и содержат необходимые данные. Повтор не требуется.",
         )
     return _run_credit_checks(
         db,
@@ -331,8 +325,23 @@ def _run_credit_checks(
             sum(check.check_type == "FNS" for check in application.checks) + 1
         )
         client = application.client
-        fns_result = fns_mock.get_fns_result(client.inn, fns_attempt_number)
-        bki_result = bki_mock.get_bki_result(client.inn)
+        try:
+            fns_result = fns_mock.get_fns_result(client.inn, fns_attempt_number)
+        except (TimeoutError, ConnectionError) as exc:
+            logger.warning("FNS unavailable for application %s: %s", application.id, type(exc).__name__)
+            fns_result = fns_mock.FNSResult(
+                "TIMEOUT" if isinstance(exc, TimeoutError) else "ERROR", None, None,
+                annual_operating_expenses=None,
+            )
+        try:
+            bki_result = bki_mock.get_bki_result(client.inn)
+        except (TimeoutError, ConnectionError) as exc:
+            logger.warning("BKI unavailable for application %s: %s", application.id, type(exc).__name__)
+            bki_result = bki_mock.BKIResult(
+                "TIMEOUT" if isinstance(exc, TimeoutError) else "ERROR", None, None,
+                total_payments_12m=None, delayed_payments_12m=None,
+                active_loans_count=None, credit_limit_total=None,
+            )
         evaluation = evaluate_credit(application, fns_result, bki_result)
         scoring_result = evaluation.scoring_result or {
             "model": "mvp_demo_thresholds_v1",
@@ -621,8 +630,7 @@ def employee_decision(
         )
     latest_checks = _latest_checks(application)
     if (
-        application.decision_reason_code == "EXTERNAL_CHECK_UNAVAILABLE"
-        or not _required_checks_succeeded(latest_checks)
+        not _required_checks_succeeded(latest_checks)
     ):
         raise HTTPException(
             status_code=409,
@@ -712,36 +720,28 @@ def _latest_checks(application: Application) -> dict[str, ApplicationCheck]:
     latest: dict[str, ApplicationCheck] = {}
     for check in application.checks:
         if check.check_type in {"FNS", "BKI"}:
-            latest[check.check_type] = check
+            previous = latest.get(check.check_type)
+            if previous is None or check.id > previous.id:
+                latest[check.check_type] = check
     return latest
 
 
 def _required_checks_succeeded(
     checks: dict[str, ApplicationCheck],
 ) -> bool:
-    fns = checks.get("FNS")
-    bki = checks.get("BKI")
-    return bool(
-        fns is not None
-        and bki is not None
-        and fns.status == "SUCCESS"
-        and bki.status == "SUCCESS"
-        and fns.response_data
-        and fns.response_data.get("is_active") is not None
-        and fns.response_data.get("business_age_months") is not None
-        and bki.response_data
-        and bki.response_data.get("current_overdue_days") is not None
-        and bki.response_data.get("monthly_debt_payments") is not None
-    )
+    try:
+        fns, bki = saved_sources(checks)
+        return source_problem(fns, bki, datetime.now(timezone.utc).date()) is None
+    except (KeyError, TypeError, ValueError):
+        return False
 
 
 def _has_known_stop_factor(checks: dict[str, ApplicationCheck]) -> bool:
     if not _required_checks_succeeded(checks):
         return True
-    fns = checks["FNS"].response_data or {}
-    bki = checks["BKI"].response_data or {}
+    fns, bki = saved_sources(checks)
     return bool(
-        fns["is_active"] is not True
-        or fns["business_age_months"] < 12
-        or bki["current_overdue_days"] > 0
+        fns.is_active is not True
+        or business_too_young(fns, datetime.now(timezone.utc).date())
+        or bki.current_overdue_days > 0
     )

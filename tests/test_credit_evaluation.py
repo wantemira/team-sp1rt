@@ -78,3 +78,30 @@ def test_outcomes_distinguish_technical_missing_and_negative_data(demo_inputs, f
     assert (result.status, result.reason_code) == (expected_status, expected_reason)
     assert result.approved_amount is None
     assert result.scoring_result["offer"] is None
+
+
+@pytest.mark.parametrize("source,changes", [
+    ("fns", {"is_active": "false"}),
+    ("fns", {"business_age_months": "48"}),
+    ("fns", {"registration_date": "2022-01-01"}),
+    ("fns", {"okved": ["47.11"]}),
+    ("fns", {"annual_revenue": "NaN"}),
+    ("fns", {"annual_operating_expenses": "-1"}),
+    ("bki", {"current_overdue_days": False}),
+    ("bki", {"total_payments_12m": "24"}),
+    ("bki", {"delayed_payments_12m": 25}),
+    ("bki", {"monthly_debt_payments": 0.0}),
+])
+def test_malformed_source_data_cannot_approve_or_crash(demo_inputs, source, changes):
+    application, fns, bki = demo_inputs
+    fns = replace(fns, **changes) if source == "fns" else fns
+    bki = replace(bki, **changes) if source == "bki" else bki
+    result = evaluate_credit(application, fns, bki)
+    assert (result.status, result.reason_code) == ("MANUAL_REVIEW", "INVALID_SOURCE_DATA")
+    assert result.approved_amount is None and result.scoring_result["offer"] is None
+
+
+def test_registration_date_is_enough_without_legacy_business_age(demo_inputs):
+    application, fns, bki = demo_inputs
+    result = evaluate_credit(application, replace(fns, business_age_months=None), bki)
+    assert result.status == "APPROVED"

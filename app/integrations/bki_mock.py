@@ -8,10 +8,10 @@ class BKIResult:
     status: CheckStatus
     current_overdue_days: int | None
     monthly_debt_payments: str | None
-    total_payments_12m: int = 24
-    delayed_payments_12m: int = 0
-    active_loans_count: int = 1
-    credit_limit_total: str = "2000000.00"
+    total_payments_12m: int | None = 24
+    delayed_payments_12m: int | None = 0
+    active_loans_count: int | None = 1
+    credit_limit_total: str | None = "2000000.00"
 
     def as_response_data(self) -> dict:
         return {

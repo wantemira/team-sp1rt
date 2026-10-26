@@ -1,7 +1,7 @@
 """Adapt source responses to the pure calculation and choose a workflow outcome."""
 
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any, Literal
 
@@ -11,6 +11,7 @@ from app.models import Application
 from app.services.credit_math import (
     CreditInputs, RULES_VERSION, TARGET_DSCR, affordable_loan, explanation, price_loan,
 )
+from app.services.source_data import business_days, business_too_young, saved_sources, source_problem
 
 CreditStatus = Literal["NEEDS_INFO", "MANUAL_REVIEW", "APPROVED", "REJECTED"]
 REJECT_SCORE_MAX = 39
@@ -59,17 +60,13 @@ def evaluate_credit(
         )
 
     # Missing data and a technical failure are not evidence of default.
-    if fns_result.status != "SUCCESS" or bki_result.status != "SUCCESS":
-        return result("MANUAL_REVIEW", "EXTERNAL_CHECK_UNAVAILABLE")
-    if fns_result.is_active is None or fns_result.business_age_months is None or bki_result.current_overdue_days is None:
-        return result("MANUAL_REVIEW", "EXTERNAL_DATA_INCOMPLETE")
+    problem = source_problem(fns_result, bki_result, calculated_at.date())
+    if problem:
+        return result("MANUAL_REVIEW", problem)
     if not fns_result.is_active:
         return result("REJECTED", "BUSINESS_INACTIVE")
-    days = ((calculated_at.date() - fns_result.registration_date).days
-            if fns_result.registration_date else fns_result.business_age_months * 30)
-    if days < 0:
-        return result("MANUAL_REVIEW", "INVALID_SOURCE_DATA")
-    if (days < 365 if fns_result.registration_date else fns_result.business_age_months < 12):
+    days = business_days(fns_result, calculated_at.date())
+    if business_too_young(fns_result, calculated_at.date()):
         return result("REJECTED", "BUSINESS_TOO_YOUNG")
     if bki_result.current_overdue_days > 0:
         return result("REJECTED", "CURRENT_OVERDUE")
@@ -81,8 +78,6 @@ def evaluate_credit(
                (("annual_revenue", revenue), ("annual_expenses", expenses)) if value is None]
     if missing:
         return result("NEEDS_INFO", "MISSING_FINANCIAL_INFORMATION", missing=missing)
-    if bki_result.monthly_debt_payments is None:
-        return result("MANUAL_REVIEW", "EXTERNAL_DATA_INCOMPLETE")
     try:
         business = CreditInputs(days, fns_result.okved, Decimal(revenue), Decimal(expenses),
                                 Decimal(bki_result.monthly_debt_payments),
@@ -124,26 +119,11 @@ def evaluate_credit(
 
 def evaluate_manual_offer(application: Application, checks: dict, amount: Decimal) -> CreditEvaluation:
     """Повторный расчёт условий по сохранённым проверкам, без вызовов моков."""
-    fns_check, bki_check = checks["FNS"], checks["BKI"]
-    fns, bki = fns_check.response_data or {}, bki_check.response_data or {}
     try:
-        registration = fns.get("registration_date")
-        fns_result = FNSResult(
-            status=fns_check.status, is_active=fns.get("is_active"),
-            business_age_months=fns.get("business_age_months"),
-            registration_date=date.fromisoformat(registration) if registration else None,
-            okved=fns.get("okved", ""), annual_revenue=fns.get("annual_revenue"),
-            annual_operating_expenses=fns.get("annual_operating_expenses"),
-        )
-        bki_result = BKIResult(
-            status=bki_check.status, current_overdue_days=bki.get("current_overdue_days"),
-            monthly_debt_payments=bki.get("monthly_debt_payments"),
-            total_payments_12m=bki.get("total_payments_12m"),
-            delayed_payments_12m=bki.get("delayed_payments_12m"),
-        )
+        fns_result, bki_result = saved_sources(checks)
         return evaluate_credit(application, fns_result, bki_result,
                                approved_amount_limit=amount, manual_approval=True)
-    except (TypeError, ValueError, InvalidOperation):
+    except (KeyError, TypeError, ValueError, InvalidOperation):
         return CreditEvaluation("MANUAL_REVIEW", None, "INVALID_SOURCE_DATA")
 
 
