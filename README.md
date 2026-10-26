@@ -104,6 +104,19 @@ python -m pytest
 Tests use an isolated in-memory SQLite database and do not connect to the
 development or production database.
 
+Optional PostgreSQL checks:
+
+```powershell
+$env:CREDIT_TEST_POSTGRES_URL = "postgresql+psycopg2://test_user:test_password@localhost:5432/credit_test"
+python -m pytest -m postgres
+```
+
+Use a dedicated test database with permission to create schemas. These checks
+create unique temporary schemas, apply every Alembic migration, run `alembic check`,
+and verify concurrent signing and competing employee decisions. Their schemas
+are removed afterward. Without this variable the PostgreSQL tests are skipped.
+The initial verification used PostgreSQL 17; Compose currently targets 16.
+
 ## Credit demo
 
 Sign in as `demo.ip@example.com` with `TEST_USERS_PASSWORD`. Request

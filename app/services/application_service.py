@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import HTTPException, UploadFile, status
+from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm.exc import StaleDataError
 from sqlalchemy.orm import Session
@@ -25,6 +26,7 @@ from app.schemas.applications import (
     ApplicationFill,
     ApplicationPatch,
     BusinessData,
+    CreditOffer,
     EmployeeActionRequest,
     EmployeeApplicationDetail,
     EmployeeApplicationShort,
@@ -442,9 +444,24 @@ def sign_application(
             status_code=409,
             detail="Only approved applications can be issued.",
         )
-    if (not application.offer or application.approved_amount is None or application.approved_amount <= 0
-            or application.approved_rate is None):
-        raise HTTPException(status_code=409, detail="Approved loan terms are missing.")
+    try:
+        offer = CreditOffer.model_validate(application.offer)
+        consistent = (
+            application.requested_amount is not None
+            and MIN_AMOUNT <= offer.amount <= min(application.requested_amount, MAX_AMOUNT)
+            and offer.amount == application.approved_amount
+            and offer.annual_rate_pct == application.approved_rate
+            and offer.term_months == application.requested_term_months
+            and offer.dscr >= offer.target_dscr
+            and offer.kind == ("COUNTER_OFFER" if offer.amount < application.requested_amount else "ORIGINAL")
+        )
+    except ValidationError:
+        consistent = False
+    if not consistent:
+        raise HTTPException(status_code=409, detail={
+            "error_code": "OFFER_INCONSISTENT",
+            "message": "Сохранённые условия отсутствуют или противоречат решению. Обратитесь к сотруднику банка.",
+        })
     application.status = "ISSUED"
     issued_at = datetime.now(timezone.utc)
     application.signed_at = issued_at

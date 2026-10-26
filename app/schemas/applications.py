@@ -76,10 +76,10 @@ class CreditOffer(BaseModel):
     monthly_payment: Decimal = Field(gt=0)
     dscr: Decimal = Field(ge=TARGET_DSCR)
     requested_dscr: Decimal
-    target_dscr: Decimal
-    monthly_cash_flow: Decimal
-    existing_debt_payments: Decimal
-    max_total_debt_service: Decimal
+    target_dscr: Decimal = Field(gt=0)
+    monthly_cash_flow: Decimal = Field(gt=0)
+    existing_debt_payments: Decimal = Field(ge=0)
+    max_total_debt_service: Decimal = Field(gt=0)
     explanation: str
 
 
