@@ -84,6 +84,7 @@ test('Одобрение на мобильном: серверные лимит�
   await page.getByRole('button', { name: 'Одобрить', exact: true }).click()
   const dialog = page.getByRole('dialog')
   await dialog.getByLabel('Комментарий', { exact: true }).fill('Подтверждаем безопасный лимит')
+  await page.screenshot({ path: test.info().outputPath('employee-mobile.png') })
   await dialog.getByLabel('Одобренная сумма').fill('200000')
   await dialog.getByRole('button', { name: 'Одобрить', exact: true }).click()
   await expect(dialog.getByRole('alert')).toContainText('250 000')

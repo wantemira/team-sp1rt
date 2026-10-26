@@ -18,32 +18,39 @@ export default function ClientApplicationNew() {
   const draft = useRef(null)
   const lock = useRef(false)
   const [values, setValues] = useState({ requested_amount: '', requested_term_months: '' })
-  const [loading, setLoading] = useState(Boolean(queryId))
+  const [restored, setRestored] = useState(null)
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
   const [fields, setFields] = useState({})
   const [notice, setNotice] = useState('')
+  const [attempt, setAttempt] = useState(0)
+  const loading = Boolean(queryId && (restored?.id !== queryId || restored?.attempt !== attempt))
 
   useEffect(() => {
+    draft.current = null
     if (!queryId) return
     const controller = new AbortController()
     api.applications.get(queryId, controller.signal).then(data => {
+      if (controller.signal.aborted) return
       if (data.status !== 'DRAFT') return navigate(`/client/applications/${data.id}`, { replace: true })
-      draft.current = data
+      draft.current = data; setError('')
       setValues({ requested_amount: data.requested_amount || '', requested_term_months: String(data.requested_term_months || '') })
-    }).catch(err => { if (err.name !== 'AbortError') setError(err.message) })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false) })
+      setRestored({ id: queryId, attempt, failed: false })
+    }).catch(err => {
+      if (controller.signal.aborted) return
+      setError(err.message); setRestored({ id: queryId, attempt, failed: true })
+    })
     return () => controller.abort()
-  }, [api, queryId, navigate])
+  }, [api, queryId, navigate, attempt])
 
   async function save(submit) {
-    if (lock.current || loading || !product || (queryId && !draft.current)) return
+    if (lock.current || loading || !product || (queryId && String(draft.current?.id) !== queryId)) return
     const term = values.requested_term_months || String(product.terms.at(-1))
     const errors = validateLoan({ ...values, requested_term_months: term }, product, submit)
     if (Object.keys(errors).length) { setFields(errors); return }
     const amount = normalizeMoneyInput(values.requested_amount)
     lock.current = true
-    setBusy(submit ? 'submit' : 'save')
+    setBusy(submit ? 'prepare' : 'save')
     setError(''); setFields({}); setNotice('')
     const payload = { requested_amount: amount, requested_term_months: Number(term), purpose: 'Пополнение оборотных средств' }
     try {
@@ -52,6 +59,7 @@ export default function ClientApplicationNew() {
         : await api.applications.create({ product_type: product.id, ...payload })
       draft.current = saved
       if (submit) {
+        setBusy('checks')
         const result = await api.applications.submit(saved.id, saved.version)
         navigate(`/client/applications/${result.id}`)
       } else {
@@ -60,12 +68,19 @@ export default function ClientApplicationNew() {
       }
     } catch (err) {
       if (err.status === 409 && draft.current) {
-        const latest = await api.applications.get(draft.current.id).catch(() => null)
+        const draftId = draft.current.id
+        const latest = await api.applications.get(draftId).catch(() => null)
         if (latest?.status === 'DRAFT') {
           draft.current = latest
           setValues({ requested_amount: latest.requested_amount || '', requested_term_months: String(latest.requested_term_months || '') })
         } else if (latest) return navigate(`/client/applications/${latest.id}`)
-        setError('Заявка уже изменена. Обновили данные; проверьте их перед отправкой.')
+        if (latest) setError('Заявка уже изменена. Обновили данные; проверьте их перед отправкой.')
+        else {
+          draft.current = null
+          setRestored({ id: String(draftId), attempt, failed: true })
+          setError('Заявка изменилась, но загрузить её текущую версию не удалось. Обновите черновик перед отправкой.')
+          navigate(`/client/applications/new?draft=${draftId}`, { replace: true })
+        }
       } else {
         setError(err.message)
         setFields(getFieldErrors(err))
@@ -77,6 +92,7 @@ export default function ClientApplicationNew() {
   if (catalog.loading) return <LoadingState label="Загружаем условия кредита…" />
   if (catalog.error || !product) return <InlineAlert tone="danger">{catalog.error || 'Сейчас нет доступного кредитного продукта.'}<Button onClick={catalog.reload}>Обновить условия</Button></InlineAlert>
   if (loading) return <LoadingState label="Восстанавливаем черновик…" />
+  if (queryId && restored?.failed) return <InlineAlert tone="danger">{error || 'Не удалось загрузить черновик.'}<Button onClick={() => setAttempt(value => value + 1)}>Обновить черновик</Button></InlineAlert>
   return <>
     <PageHeader title={product.name} description="Заполните параметры — сведения о бизнесе проверим по ИНН." />
     <div className="form-layout">
@@ -91,8 +107,8 @@ export default function ClientApplicationNew() {
           </Field>
           <Field label="ИНН" value={client?.inn || ''} readOnly hint="ИНН вашего бизнеса из профиля банка" />
           <div className="application-actions">
-            <Button variant="secondary" disabled={Boolean(busy)} onClick={() => save(false)}>Сохранить черновик</Button>
-            <Button type="submit" loading={busy === 'submit'} disabled={Boolean(busy)}>Отправить заявку</Button>
+            <Button variant="secondary" loading={busy === 'save'} disabled={Boolean(busy)} onClick={() => save(false)}>Сохранить черновик</Button>
+            <Button type="submit" loading={busy === 'prepare' || busy === 'checks'} disabled={Boolean(busy)}>Отправить заявку</Button>
           </div>
         </form>
       </Card>
@@ -101,6 +117,7 @@ export default function ClientApplicationNew() {
         <p className="muted">Если запрошенный платёж слишком велик, предложим доступную сумму и объясним расчёт. Проверки и данные на этом стенде смоделированы.</p>
       </Card>
     </div>
-    {busy === 'submit' && <Card title="Проверяем заявку"><LoadingState label="Проверка по ЕГРИП (ФНС)… Запрос в БКИ…" /><p className="muted">Ожидаем результаты проверок и расчёт условий.</p></Card>}
+    {busy === 'prepare' && <LoadingState label="Сохраняем параметры заявки…" />}
+    {busy === 'checks' && <Card title="Проверяем заявку"><LoadingState label="Проверка по ЕГРИП (ФНС)… Запрос в БКИ…" /><p className="muted">Ожидаем результаты проверок и расчёт условий.</p></Card>}
   </>
 }
