@@ -9,7 +9,7 @@ export class ApiError extends Error {
 }
 /** No implicit token storage and no requests on import. Supply getToken from auth. */
 export function createApiClient({ baseUrl = '/api/v1', getToken = () => null, onUnauthorized = () => {} } = {}) {
-  return async function request(path, { method = 'GET', body, signal } = {}) {
+  return async function request(path, { method = 'GET', body, signal, responseType = 'json' } = {}) {
     const token = getToken()
     const isForm = typeof FormData !== 'undefined' && body instanceof FormData
     const headers = { Accept: 'application/json' }
@@ -18,6 +18,7 @@ export function createApiClient({ baseUrl = '/api/v1', getToken = () => null, on
     const response = await fetch(`${baseUrl.replace(/\/$/, '')}${path}`, {
       method, headers, signal, body: body === undefined ? undefined : isForm ? body : JSON.stringify(body),
     })
+    if (response.ok && responseType === 'blob') return response.blob()
     const payload = response.status === 204 ? null : await response.json().catch(() => null)
     if (!response.ok) {
       if (response.status === 401) onUnauthorized()

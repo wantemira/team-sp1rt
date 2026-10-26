@@ -29,9 +29,10 @@ export default function LoginPage() {
   return (
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', backgroundColor: 'var(--bg-subtle, #f4f5f7)' }}>
       <div style={{ width: '100%', maxWidth: 400, padding: 20 }}>
-        <Card title="Вход в систему">
+        <Card title="Вход в кредитный кабинет">
+          <p className="muted">Демонстрационный ИП: demo.ip@example.com. Пароль указан в настройках запуска стенда.</p>
           <form onSubmit={handleSubmit} className="stack" style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '16px' }}>
-            {error && <InlineAlert type="error">{error}</InlineAlert>}
+            {error && <InlineAlert tone="danger">{error}</InlineAlert>}
             
             <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <span>Email</span>
@@ -42,7 +43,8 @@ export default function LoginPage() {
                 required 
                 disabled={isSubmitting}
                 style={{ padding: '10px', borderRadius: '6px', border: '1px solid #ccc' }}
-                placeholder="client@test.com"
+                placeholder="demo.ip@example.com"
+                autoComplete="username"
               />
             </label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -54,7 +56,8 @@ export default function LoginPage() {
                 required 
                 disabled={isSubmitting}
                 style={{ padding: '10px', borderRadius: '6px', border: '1px solid #ccc' }}
-                placeholder="Введите 123"
+                placeholder="Пароль учётной записи"
+                autoComplete="current-password"
               />
             </label>
             <Button type="submit" disabled={isSubmitting} style={{ marginTop: '8px', width: '100%' }}>
