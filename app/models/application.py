@@ -77,3 +77,9 @@ class Application(Base):
     )
 
     __mapper_args__ = {"version_id_col": version}
+
+    @property
+    def offer(self) -> dict[str, Any] | None:
+        if self.status not in {"APPROVED", "ISSUED"}:
+            return None
+        return (self.scoring_result or {}).get("offer")

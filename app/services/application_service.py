@@ -584,6 +584,7 @@ def get_employee_application(
                     "scoring_result",
                     "approved_amount",
                     "approved_rate",
+                    "offer",
                     "missing_fields",
                     "info_comment",
                     "signed_at",

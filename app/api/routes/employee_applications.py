@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_current_employee
+from app.api.versioning import requested_version
 from app.db.session import get_db
 from app.models import User
 from app.schemas.applications import (
@@ -49,7 +50,7 @@ def decide_application(
 @router.post("/{id}/retry-checks", response_model=ApplicationResponse)
 def retry_checks(
     id: int,
-    version: int, # Передаем версию для защиты от конфликтов
+    version: int = Depends(requested_version),
     employee: User = Depends(get_current_employee),
     db: Session = Depends(get_db),
 ) -> ApplicationResponse:

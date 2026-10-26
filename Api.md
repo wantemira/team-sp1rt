@@ -442,3 +442,26 @@
 **Успешный ответ — 200:** карточка `ApplicationResponse` с итоговым статусом, версия увеличена.
 
 **Ошибки:** `401` — нет токена; `403` — нет роли сотрудника; `404` — заявка не найдена; `409` — нет технически неуспешной проверки, неверный статус или устаревшая версия.
+
+
+## Контракт подключения кабинетов
+
+Основной контракт `POST /applications/{id}/submit`, `POST /applications/{id}/sign`
+и `POST /employee/applications/{id}/retry-checks`: JSON `{"version": 2}`.
+Query-параметр временно сохранён для старых клиентов. Если версии отсутствуют
+или JSON и query противоречат друг другу — 422; устаревшая версия — 409.
+Дозаполнение: `POST /applications/{id}/fill` с business_data и version;
+PATCH сохранён как совместимый маршрут.
+
+`ApplicationStatusResponse.offer` — типизированное предложение или null.
+В APPROVED/ISSUED содержит kind (ORIGINAL/COUNTER_OFFER), amount,
+annual_rate_pct, term_months, monthly_payment, dscr, requested_dscr,
+target_dscr, monthly_cash_flow, existing_debt_payments,
+max_total_debt_service и explanation. Деньги и числовые показатели — строки;
+срок — число месяцев. Ставка 20 означает 20% годовых. Предложение берётся из
+сохранённого результата; при чтении или согласии заново не рассчитывается.
+
+Очередь сотрудника принимает также APPROVED/REJECTED/ISSUED для истории.
+Виртуальные UI-фильтры QUEUE/REVIEW/HISTORY не передаются серверу: клиент
+запрашивает нужные статусы и объединяет ответы по id. Сервер определяет
+доступные действия через next_actions.

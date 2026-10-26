@@ -5,6 +5,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_current_client, get_current_user
+from app.api.versioning import requested_version
 from app.db.session import get_db
 from app.models import User
 from app.schemas.applications import (
@@ -83,7 +84,7 @@ def patch_application(
 @router.post("/applications/{id}/submit", response_model=ApplicationResponse)
 def submit_application(
     id: int,
-    version: int,
+    version: int = Depends(requested_version),
     user: User = Depends(get_current_client),
     db: Session = Depends(get_db),
 ) -> ApplicationResponse:
@@ -91,6 +92,7 @@ def submit_application(
 
 
 @router.post("/applications/{id}/fill", response_model=ApplicationResponse)
+@router.patch("/applications/{id}/fill", response_model=ApplicationResponse, include_in_schema=False)
 def fill_application(
     id: int,
     request: ApplicationFill,
@@ -103,7 +105,7 @@ def fill_application(
 @router.post("/applications/{id}/sign", response_model=ApplicationResponse)
 def sign_application(
     id: int,
-    version: int, # По ТЗ передаем version
+    version: int = Depends(requested_version),
     user: User = Depends(get_current_client),
     db: Session = Depends(get_db),
 ) -> ApplicationResponse:

@@ -1060,3 +1060,56 @@ def test_approval_without_terms_cannot_be_signed(client: TestClient) -> None:
     response = client.post(f"/api/v1/applications/{application_id}/sign?version=1", headers=headers)
     assert response.status_code == 409
     assert client.get(f"/api/v1/applications/{application_id}", headers=headers).json()["status"] == "APPROVED"
+
+
+def test_json_version_offer_contract_and_employee_history(client: TestClient) -> None:
+    with TestSession() as db:
+        seed_test_users(db, "local-test-password")
+        db.commit()
+    headers = {"Authorization": f"Bearer {bearer_token(client, 'demo.ip@example.com', 'local-test-password')}"}
+    created = client.post("/api/v1/applications", headers=headers, json={
+        "product_type": "term_loan", "requested_amount": "1000000.00", "requested_term_months": 24,
+    }).json()
+    path = f"/api/v1/applications/{created['id']}"
+    assert client.post(f"{path}/submit", headers=headers).status_code == 422
+    assert client.post(f"{path}/submit?version=2", headers=headers, json={"version": 1}).status_code == 422
+    assert client.post(f"{path}/submit", headers=headers, json={"version": 0}).status_code == 422
+    assert client.post(f"{path}/submit", headers=headers, json={"version": 1, "approved_amount": "9999999"}).status_code == 422
+    approved_response = client.post(f"{path}/submit", headers=headers, json={"version": 1})
+    assert approved_response.status_code == 200
+    approved = approved_response.json()
+    assert approved["offer"] == approved["scoring_result"]["offer"]
+    employee_headers = {"Authorization": f"Bearer {bearer_token(client, 'test.employee1@example.com', 'local-test-password')}"}
+    history = client.get("/api/v1/employee/applications?status=APPROVED", headers=employee_headers)
+    assert history.status_code == 200 and approved["id"] in [item["id"] for item in history.json()]
+    employee_card = client.get(f"/api/v1/employee/applications/{approved['id']}", headers=employee_headers)
+    assert employee_card.json()["offer"] == approved["offer"]
+    assert client.post(f"{path}/sign", headers=headers, json={"version": 1}).status_code == 409
+    issued = client.post(f"{path}/sign", headers=headers, json={"version": approved["version"]})
+    assert issued.status_code == 200 and issued.json()["offer"] == approved["offer"]
+    history = client.get("/api/v1/employee/applications?status=ISSUED", headers=employee_headers)
+    assert approved["id"] in [item["id"] for item in history.json()]
+
+
+def test_retry_supports_json_version(client: TestClient) -> None:
+    with TestSession() as db:
+        seed_test_users(db, "local-test-password")
+        db.commit()
+    headers = {"Authorization": f"Bearer {bearer_token(client, 'test.client3@example.com', 'local-test-password')}"}
+    created = client.post("/api/v1/applications", headers=headers, json=application_request()).json()
+    submitted = client.post(f"/api/v1/applications/{created['id']}/submit", headers=headers, json={"version": 1}).json()
+    assert submitted["decision_reason_code"] == "EXTERNAL_CHECK_UNAVAILABLE"
+    employee_headers = {"Authorization": f"Bearer {bearer_token(client, 'test.employee1@example.com', 'local-test-password')}"}
+    retry = client.post(f"/api/v1/employee/applications/{created['id']}/retry-checks", headers=employee_headers, json={"version": submitted["version"]})
+    assert retry.status_code == 200 and retry.json()["status"] == "APPROVED"
+    assert retry.json()["offer"] is not None
+
+
+def test_openapi_describes_typed_offer_and_json_versions(client: TestClient) -> None:
+    spec = client.get("/openapi.json").json()
+    assert "CreditOffer" in spec["components"]["schemas"]
+    for path in ("/api/v1/applications/{id}/submit", "/api/v1/applications/{id}/sign", "/api/v1/employee/applications/{id}/retry-checks"):
+        post = spec["paths"][path]["post"]
+        assert "application/json" in post["requestBody"]["content"]
+        version = next(param for param in post["parameters"] if param["name"] == "version")
+        assert version["deprecated"] and not version["required"]

@@ -53,6 +53,31 @@ class QueueStatus(StrEnum):
     MANUAL_REVIEW = "MANUAL_REVIEW"
     CHECKING = "CHECKING"
     NEEDS_INFO = "NEEDS_INFO"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    ISSUED = "ISSUED"
+
+
+class ApplicationVersion(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    version: int = Field(ge=1)
+
+
+class CreditOffer(BaseModel):
+    """Условия сервера: деньги в рублях, ставка в процентах годовых."""
+
+    kind: Literal["ORIGINAL", "COUNTER_OFFER"]
+    amount: Decimal = Field(gt=0)
+    annual_rate_pct: Decimal = Field(ge=0)
+    term_months: Literal[6, 12, 24]
+    monthly_payment: Decimal = Field(gt=0)
+    dscr: Decimal = Field(ge=Decimal("1.35"))
+    requested_dscr: Decimal
+    target_dscr: Decimal
+    monthly_cash_flow: Decimal
+    existing_debt_payments: Decimal
+    max_total_debt_service: Decimal
+    explanation: str
 
 
 # --- 1. Типизированные финансовые данные (ТЗ п.2) ---
@@ -179,6 +204,7 @@ class ApplicationResponse(BaseModel):
     scoring_result: dict[str, Any] | None
     approved_amount: Decimal | None
     approved_rate: Decimal | None
+    offer: CreditOffer | None = None
     signed_at: datetime | None
     issued_at: datetime | None
     created_at: datetime

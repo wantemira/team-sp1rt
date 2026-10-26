@@ -262,11 +262,19 @@ paths:
             type: integer
         - name: version
           in: query
-          required: true
+          required: false
+          deprecated: true
           schema:
             type: integer
             minimum: 1
-          description: Текущая версия заявки из предыдущего ответа.
+          description: Совместимость; основной контракт передаёт version в JSON.
+      requestBody:
+        required: false
+        description: Передайте JSON с version; старый query поддерживается временно. Отсутствие версии или конфликт значений возвращает 422.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplicationVersion'
       responses:
         '200':
           description: Заявка отправлена на проверку
@@ -384,10 +392,19 @@ paths:
             type: integer
         - name: version
           in: query
-          required: true
+          required: false
+          deprecated: true
           schema:
             type: integer
             minimum: 1
+          description: Совместимость; основной контракт передаёт version в JSON.
+      requestBody:
+        required: false
+        description: Передайте JSON с version; старый query поддерживается временно. Отсутствие версии или конфликт значений возвращает 422.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplicationVersion'
       responses:
         '200':
           description: Заявка переведена из APPROVED в ISSUED
@@ -550,7 +567,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [MANUAL_REVIEW, CHECKING, NEEDS_INFO]
+            enum: [MANUAL_REVIEW, CHECKING, NEEDS_INFO, APPROVED, REJECTED, ISSUED]
             default: MANUAL_REVIEW
       responses:
         '401':
@@ -700,11 +717,19 @@ paths:
             type: integer
         - name: version
           in: query
-          required: true
+          required: false
+          deprecated: true
           schema:
             type: integer
             minimum: 1
-          description: Текущая версия заявки.
+          description: Совместимость; основной контракт передаёт version в JSON.
+      requestBody:
+        required: false
+        description: Передайте JSON с version; старый query поддерживается временно. Отсутствие версии или конфликт значений возвращает 422.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplicationVersion'
       responses:
         '200':
           description: Карточка заявки с результатом повторных проверок
@@ -752,6 +777,64 @@ components:
         applications.client_id; операции сотрудника требуют role=employee.
 
   schemas:
+    ApplicationVersion:
+      type: object
+      additionalProperties: false
+      required:
+      - version
+      properties:
+        version:
+          type: integer
+          minimum: 1
+    CreditOffer:
+      type: object
+      required:
+      - kind
+      - amount
+      - annual_rate_pct
+      - term_months
+      - monthly_payment
+      - dscr
+      - requested_dscr
+      - target_dscr
+      - monthly_cash_flow
+      - existing_debt_payments
+      - max_total_debt_service
+      - explanation
+      properties:
+        kind:
+          type: string
+          enum:
+          - ORIGINAL
+          - COUNTER_OFFER
+        amount:
+          type: string
+        annual_rate_pct:
+          type: string
+          description: 'Проценты годовых: строка 20.0000 означает 20%.'
+        term_months:
+          type: integer
+          enum:
+          - 6
+          - 12
+          - 24
+        monthly_payment:
+          type: string
+        dscr:
+          type: string
+          description: Покрытие платежей на окончательных условиях, не ниже 1.35.
+        requested_dscr:
+          type: string
+        target_dscr:
+          type: string
+        monthly_cash_flow:
+          type: string
+        existing_debt_payments:
+          type: string
+        max_total_debt_service:
+          type: string
+        explanation:
+          type: string
     Product:
       type: object
       properties:
@@ -1120,6 +1203,11 @@ components:
           nullable: true
           example: "28.0000"
           description: Сервер фиксирует ставку 28% годовых при ручном одобрении.
+        offer:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/CreditOffer'
+          description: Рассчитанное предложение; доступно в APPROVED и ISSUED.
         signed_at:
           type: string
           format: date-time
