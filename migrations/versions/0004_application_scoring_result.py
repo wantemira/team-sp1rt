@@ -1,7 +1,7 @@
-"""Store the full scoring calculation result.
+"""Хранение полного результата кредитного расчёта.
 
-Revision ID: 0004_application_scoring_result
-Revises: 0003_application_review_metadata
+Ревизия: 0004_application_scoring_result
+Предыдущая ревизия: 0003_application_review_metadata
 """
 from typing import Sequence, Union
 

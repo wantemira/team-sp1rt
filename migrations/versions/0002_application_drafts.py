@@ -1,7 +1,7 @@
-"""Allow incomplete draft applications and track concurrent edits.
+"""Неполные черновики и версия для защиты от конкурентных изменений.
 
-Revision ID: 0002_application_drafts
-Revises: 0001_initial_schema
+Ревизия: 0002_application_drafts
+Предыдущая ревизия: 0001_initial_schema
 """
 from typing import Sequence, Union
 

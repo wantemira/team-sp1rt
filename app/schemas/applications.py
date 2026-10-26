@@ -83,7 +83,6 @@ class CreditOffer(BaseModel):
     explanation: str
 
 
-# --- 1. Типизированные финансовые данные (ТЗ п.2) ---
 class Financials(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -101,7 +100,6 @@ class BusinessData(BaseModel):
     financials: Financials = Field(default_factory=Financials)
 
 
-# --- 2. Клиентские схемы (ТЗ п.2) ---
 class ApplicationCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -114,7 +112,6 @@ class ApplicationCreate(BaseModel):
     business_data: BusinessData = Field(default_factory=BusinessData)
 
 
-# --- 3. Схемы действий сотрудника (ТЗ п.4) ---
 class EmployeeActionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -131,7 +128,6 @@ class EmployeeActionRequest(BaseModel):
     )
     comment: str | None = Field(default=None, max_length=4000)
 
-    # Строгая валидация действий (ТЗ п.4)
     @model_validator(mode="after")
     def validate_action_payload(self):
         self.comment = self.comment.strip() if self.comment else None
@@ -154,7 +150,6 @@ class EmployeeActionRequest(BaseModel):
             if not self.missing_fields or not self.decision_reason_code:
                 raise ValueError("Для REQUEST_INFO обязательны missing_fields и decision_reason_code")
             
-            # Разрешенные запрашиваемые поля MVP
             allowed_fields = {
                 "business_data.financials.annual_revenue",
                 "business_data.financials.annual_expenses"
@@ -168,7 +163,6 @@ class EmployeeActionRequest(BaseModel):
         return self
 
 
-# --- 4. Схемы ответов (ТЗ п.4) ---
 class ApplicationDocumentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -223,7 +217,6 @@ class ApplicationResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     
-    # Новые поля из ТЗ (п.4)
     version: int
     next_actions: list[str] = Field(default_factory=list)
     missing_fields: list[str] = Field(default_factory=list)

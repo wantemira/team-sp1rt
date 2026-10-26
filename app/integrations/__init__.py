@@ -1,1 +1,1 @@
-"""Deterministic external-service mocks used by the MVP."""
+"""Локальные моки ФНС и БКИ с фиксированными синтетическими профилями."""

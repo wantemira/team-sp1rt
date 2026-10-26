@@ -1,8 +1,8 @@
 """${message}
 
-Revision ID: ${up_revision}
-Revises: ${down_revision | comma,n}
-Create Date: ${create_date}
+Ревизия: ${up_revision}
+Предыдущая ревизия: ${down_revision | comma,n}
+Дата создания: ${create_date}
 """
 from typing import Sequence, Union
 

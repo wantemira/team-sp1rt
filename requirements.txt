@@ -1,6 +1,6 @@
-# Locked from the verified Python 3.12.15 Linux image (2026-10-26).
-# Includes runtime dependencies and their transitive dependencies.
-# Update procedure and platform scope: docs/DEPENDENCIES.md.
+# Версии из проверенного Linux-образа Python 3.12.15 от 26.10.2026.
+# Рабочие библиотеки и их транзитивные зависимости.
+# Обновление и поддерживаемая среда: docs/DEPENDENCIES.md.
 
 alembic==1.20.1
 annotated-doc==0.0.5

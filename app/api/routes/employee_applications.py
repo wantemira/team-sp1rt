@@ -42,11 +42,9 @@ def decide_application(
     employee: User = Depends(get_current_employee),
     db: Session = Depends(get_db),
 ) -> ApplicationResponse:
-    # decision содержит version, action, comment и т.д.
     return application_service.employee_decision(db, employee, id, decision)
 
 
-# ДОБАВЛЕНО ПО ТЗ: Повтор технически неуспешных проверок
 @router.post("/{id}/retry-checks", response_model=ApplicationResponse)
 def retry_checks(
     id: int,

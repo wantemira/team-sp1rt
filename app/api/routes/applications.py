@@ -23,7 +23,7 @@ router = APIRouter(tags=["Client"])
 
 @router.get("/products", response_model=list[ProductResponse])
 def get_products() -> list[dict]:
-    """Единственный продукт MVP (ТЗ п.2)"""
+    """Оборотный кредит и ограничения продукта."""
     return [{
         "id": PRODUCT_ID,
         "name": PRODUCT_NAME,
@@ -37,15 +37,13 @@ def get_products() -> list[dict]:
 
 @router.get("/news")
 def get_news(user: User = Depends(get_current_client)):
-    """Персонализированные синтетические новости (ТЗ п.3)"""
+    """Статическая синтетическая новость для кабинета клиента."""
     return [{
         "id": 1, 
         "title": "Добро пожаловать!", 
         "text": "Вы можете подать заявку на кредит до 5 млн рублей."
     }]
 
-
-# --- Заявки ---
 
 @router.post("/applications", response_model=ApplicationResponse, status_code=status.HTTP_201_CREATED)
 def create_application(
@@ -113,8 +111,6 @@ def sign_application(
 ) -> ApplicationResponse:
     return application_service.sign_application(db, user, id, version)
 
-
-# --- Документы (существующие ручки) ---
 
 @router.post("/applications/{id}/documents", response_model=ApplicationDocumentResponse, status_code=status.HTTP_201_CREATED)
 def upload_document(

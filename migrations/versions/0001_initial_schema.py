@@ -1,7 +1,7 @@
-"""Create the initial credit application schema.
+"""Создание основных таблиц кредитного кабинета.
 
-Revision ID: 0001_initial_schema
-Revises:
+Ревизия: 0001_initial_schema
+Предыдущая ревизия:
 """
 from typing import Sequence, Union
 

@@ -1,7 +1,7 @@
-"""Deterministic demonstration policy; no database or external service access.
+"""Демонстрационный расчёт без обращений к БД и внешним системам.
 
-Money is Decimal rubles. Rates are annual percentages (20 means 20%).
-PD is an illustrative mapping, not a calibrated default prediction.
+Деньги — Decimal в рублях, ставка — проценты годовых: 20 означает 20%.
+PD — демонстрационное преобразование балла без калибровки на дефолтах.
 """
 
 from dataclasses import dataclass
@@ -58,7 +58,7 @@ class PricedLoan:
 
 
 def monthly_payment(amount: Decimal, annual_rate_pct: Decimal, months: int) -> Decimal:
-    """Return the unrounded annuity; round only at the offer boundary."""
+    """Аннуитет без округления; округляется только платёж итогового предложения."""
     if (not amount.is_finite() or not annual_rate_pct.is_finite()
             or amount < 0 or annual_rate_pct < 0 or months <= 0):
         raise ValueError("Invalid loan parameters.")
@@ -80,7 +80,7 @@ def _clamp(value: Decimal) -> Decimal:
 def score_factors(inputs: CreditInputs, amount: Decimal, dscr: Decimal) -> tuple[Decimal, ...]:
     age = D(str(log10(max(1, inputs.days_in_business)))) / 3
     coverage = (dscr - 1) * 2
-    # No history is unknown, not a perfect record and not delinquency.
+    # При отсутствии истории используем нейтральный фактор дисциплины.
     discipline = (D("0.5") if inputs.total_payments_12m == 0 else
                   1 - D(inputs.delayed_payments_12m) / inputs.total_payments_12m * 5)
     ratio = amount / inputs.annual_revenue if inputs.annual_revenue else D("Infinity")
@@ -99,15 +99,14 @@ def score_and_pd(factors: tuple[Decimal, ...]) -> tuple[Decimal, Decimal]:
 
 
 def annual_rate(pd: Decimal) -> Decimal:
-    # 15% funding + PD × 45% LGD × 12% capital cost + 2% opex + 3% margin.
+    # 15% база + PD × 45% потери × 12% стоимость капитала + 2% расходы + 3% маржа.
     return D(20) + pd * D("5.4")
 
 
 def price_loan(inputs: CreditInputs, amount: Decimal, months: int) -> PricedLoan:
-    """Solve rate → payment → DSCR → score → PD → rate in a bounded interval.
+    """Совместный расчёт ставки, платежа, DSCR и риска методом бисекции.
 
-    Under this policy the feedback slope is below one: the unique crossing
-    lies in [20, 25.4]. Bisection uses unrounded scores, avoiding score jumps.
+    Ставка ищется в диапазоне 20–25,4%; баллы до выбора условий не округляются.
     """
     low, high = D(20), D("25.4")
     for _ in range(48):
@@ -129,7 +128,7 @@ def price_loan(inputs: CreditInputs, amount: Decimal, months: int) -> PricedLoan
 
 
 def affordable_loan(inputs: CreditInputs, requested: Decimal, months: int) -> PricedLoan | None:
-    """Largest whole-ruble offer satisfying DSCR after rate/payment rounding."""
+    """Полный запрос или уменьшенная сумма в целых рублях с допустимым итоговым DSCR."""
     if not requested.is_finite() or not MIN_AMOUNT <= requested <= MAX_AMOUNT or months not in TERMS:
         raise ValueError("Loan is outside product limits.")
     if inputs.monthly_cash_flow <= 0:

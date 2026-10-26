@@ -1,4 +1,4 @@
-# Test tools; runtime versions are shared with the application.
+# Тестовые инструменты используют те же рабочие зависимости.
 -r requirements.txt
 
 certifi==2026.10.23

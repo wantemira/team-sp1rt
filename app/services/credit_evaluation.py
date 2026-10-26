@@ -1,4 +1,4 @@
-"""Adapt source responses to the pure calculation and choose a workflow outcome."""
+"""Проверка ответов источников, запуск расчёта и выбор кредитного решения."""
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -59,7 +59,7 @@ def evaluate_credit(
             grade, tuple(missing),
         )
 
-    # Missing data and a technical failure are not evidence of default.
+    # Недостаток данных и сбой источника требуют проверки, а не кредитного отказа.
     problem = source_problem(fns_result, bki_result, calculated_at.date())
     if problem:
         return result("MANUAL_REVIEW", problem)
@@ -71,7 +71,7 @@ def evaluate_credit(
     if bki_result.current_overdue_days > 0:
         return result("REJECTED", "CURRENT_OVERDUE")
 
-    # Synthetic source values take priority over user-provided financials.
+    # Данные источника имеют приоритет над введёнными клиентом показателями.
     revenue = fns_result.annual_revenue if fns_result.annual_revenue is not None else financials.get("annual_revenue")
     expenses = fns_result.annual_operating_expenses if fns_result.annual_operating_expenses is not None else financials.get("annual_expenses")
     missing = [f"business_data.financials.{key}" for key, value in
@@ -90,7 +90,7 @@ def evaluate_credit(
     loan = affordable_loan(business, limit, application.requested_term_months)
     if loan is None:
         return result("REJECTED", "NO_AFFORDABLE_PRODUCT_AMOUNT")
-    # Decisions use unrounded scores so display rounding cannot cross a threshold.
+    # Решение использует неокруглённый балл, чтобы не сдвигать пороги.
     if loan.score < 40:
         return result("REJECTED", "SCORE_BELOW_APPROVAL_THRESHOLD", loan=loan)
     if loan.score < APPROVE_SCORE_MIN and not manual_approval:

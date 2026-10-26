@@ -68,7 +68,7 @@ paths:
       tags:
       - Client
       summary: Get Products
-      description: Единственный продукт MVP (ТЗ п.2)
+      description: Оборотный кредит и ограничения продукта.
       operationId: get_products_api_v1_products_get
       responses:
         '200':
@@ -97,7 +97,7 @@ paths:
       tags:
       - Client
       summary: Get News
-      description: Персонализированные синтетические новости (ТЗ п.3)
+      description: Статическая синтетическая новость для кабинета клиента.
       operationId: get_news_api_v1_news_get
       responses:
         '200':

@@ -1,7 +1,7 @@
-"""Persist requested information and review actor metadata.
+"""Запрошенные сведения, даты согласия и автор решения.
 
-Revision ID: 0003_application_review_metadata
-Revises: 0002_application_drafts
+Ревизия: 0003_application_review_metadata
+Предыдущая ревизия: 0002_application_drafts
 """
 from typing import Sequence, Union
 
