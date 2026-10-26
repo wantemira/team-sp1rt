@@ -1,117 +1,38 @@
-import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { Card } from '../../components/ui';
-import { mockBackend } from '../../api/mockBackend';
-import EmployeeApplicationDetail from './EmployeeApplicationDetail';
-import { PageHeader } from '../../components/layout/AppShell'; // Для красивого заголовка
+import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { useAuth } from '../../context/AuthContext'
+import { PageHeader } from '../../components/layout/AppShell'
+import { Button, Card, InlineAlert, LoadingState, StatusBadge } from '../../components/ui'
+import { formatMoney } from '../../lib/format'
+import EmployeeApplicationDetail from './EmployeeApplicationDetail'
 
 export default function EmployeeApplications() {
-  const [searchParams] = useSearchParams();
-  
-  // Получаем статус из URL. Если пусто, то по умолчанию 'QUEUE'
-  const statusFilter = searchParams.get('status') || 'QUEUE';
-
-  const [apps, setApps] = useState([]);
-  const [selectedId, setSelectedId] = useState(null);
-  const [loading, setLoading] = useState(true);
-
+  const { api } = useAuth()
+  const [params] = useSearchParams()
+  const filter = params.get('status') || 'QUEUE'
+  const [data, setData] = useState(null)
+  const [selectedId, setSelectedId] = useState(null)
+  const [error, setError] = useState('')
+  const [attempt, setAttempt] = useState(0)
   useEffect(() => {
-    setLoading(true);
-    mockBackend.employeeList(statusFilter).then(data => {
-      const sorted = data.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-      setApps(sorted);
-      
-      // Автовыбор первой заявки
-      if (sorted.length > 0) {
-        // Если текущая выбранная заявка есть в новом списке, оставляем её, иначе берем первую
-        const currentExists = sorted.find(a => a.id === selectedId);
-        setSelectedId(currentExists ? selectedId : sorted[0].id);
-      } else {
-        setSelectedId(null);
-      }
-      setLoading(false);
-    });
-  }, [statusFilter]);
-
-  // Определяем заголовок для страницы
-  let pageTitle = "Очередь заявок";
-  let pageDesc = "Требуют ручной проверки";
-  if (statusFilter === 'REVIEW') {
-    pageTitle = "На рассмотрении";
-    pageDesc = "Заявки на проверке и ожидающие ответа от клиента";
-  } else if (statusFilter === 'HISTORY') {
-    pageTitle = "История решений";
-    pageDesc = "Одобренные и отклоненные заявки";
-  }
-
-  return (
-    <div>
-      <PageHeader title={pageTitle} description={pageDesc} />
-
-      <div style={{ display: 'grid', gridTemplateColumns: '350px 1fr', gap: '24px', alignItems: 'start', marginTop: '24px' }}>
-        
-        {/* ЛЕВАЯ КОЛОНКА: СПИСОК ЗАЯВОК */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {loading ? <div style={{ padding: '20px' }}>Загрузка...</div> : apps.map(app => (
-            <div 
-              key={app.id}
-              onClick={() => setSelectedId(app.id)}
-              style={{
-                padding: '16px', borderRadius: '12px', cursor: 'pointer',
-                backgroundColor: selectedId === app.id ? '#fff1f2' : 'white',
-                border: selectedId === app.id ? '2px solid #e11d48' : '1px solid #f3f4f6',
-                boxShadow: '0 2px 10px rgba(0,0,0,0.02)',
-                transition: 'all 0.2s'
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                <strong style={{ color: '#111827' }}>{app.company_name}</strong>
-                {app.status === 'NEEDS_INFO' && (
-                  <span style={{ fontSize: '11px', backgroundColor: '#fef3c7', color: '#b45309', padding: '2px 6px', borderRadius: '4px' }}>Ждет данных</span>
-                )}
-                {app.status === 'APPROVED' && (
-                  <span style={{ fontSize: '11px', backgroundColor: '#ecfdf5', color: '#047857', padding: '2px 6px', borderRadius: '4px' }}>Одобрено</span>
-                )}
-                {app.status === 'REJECTED' && (
-                  <span style={{ fontSize: '11px', backgroundColor: '#fef2f2', color: '#b91c1c', padding: '2px 6px', borderRadius: '4px' }}>Отклонено</span>
-                )}
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#6b7280' }}>
-                <span>{new Intl.NumberFormat('ru-RU').format(app.requested_amount)} ₽</span>
-                <span>№{app.id}</span>
-              </div>
-            </div>
-          ))}
-          
-          {apps.length === 0 && !loading && (
-            <Card>
-              <div style={{ padding: '30px 20px', textAlign: 'center', color: '#6b7280' }}>
-                В этой категории пока нет заявок.
-              </div>
-            </Card>
-          )}
-        </div>
-
-        {/* ПРАВАЯ КОЛОНКА: КАРТОЧКА ЗАЯВКИ */}
-        <div>
-          {selectedId ? (
-            <EmployeeApplicationDetail 
-              id={selectedId} 
-              onActionComplete={() => {
-                // Принудительно обновляем список после действия
-                mockBackend.employeeList(statusFilter).then(data => setApps(data));
-              }} 
-            />
-          ) : (
-            <Card>
-              <div style={{ padding: '60px 20px', textAlign: 'center', color: '#6b7280' }}>
-                Выберите заявку из списка слева
-              </div>
-            </Card>
-          )}
-        </div>
-        
-      </div>
-    </div>
-  );
+    const controller = new AbortController()
+    api.employee.queue(filter, controller.signal).then(items => {
+      setData({ filter, items: [...items].sort((a, b) => b.id - a.id) }); setError('')
+    }).catch(err => { if (err.name !== 'AbortError') setError(err.message) })
+    return () => controller.abort()
+  }, [api, filter, attempt])
+  const items = data?.filter === filter ? data.items : null
+  const selected = items?.find(item => item.id === selectedId) || items?.[0]
+  return <>
+    <PageHeader title={{ QUEUE: 'Очередь заявок', REVIEW: 'На рассмотрении', HISTORY: 'История решений' }[filter] || 'Заявки'} description="Данные заявок, результаты проверок и решения банка" action={<Button variant="secondary" onClick={() => setAttempt(value => value + 1)}>Обновить</Button>} />
+    {error && <InlineAlert tone="danger">{error}<Button onClick={() => setAttempt(value => value + 1)}>Повторить</Button></InlineAlert>}
+    {!items ? !error && <LoadingState /> : <div className="queue-layout">
+      <Card title="Заявки"><ul className="application-queue">{items.map(item => <li key={item.id}>
+        <button type="button" aria-current={selected?.id === item.id ? 'true' : undefined} onClick={() => setSelectedId(item.id)}>
+          <strong>{item.company_name}</strong><span>{formatMoney(item.requested_amount)} · №{item.id}</span><StatusBadge status={item.status} />
+        </button>
+      </li>)}</ul>{!items.length && <p className="muted">В этой категории пока нет заявок.</p>}</Card>
+      {selected ? <EmployeeApplicationDetail key={selected.id} id={selected.id} onActionComplete={() => setAttempt(value => value + 1)} /> : <Card>Выберите заявку из списка.</Card>}
+    </div>}
+  </>
 }

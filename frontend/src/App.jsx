@@ -4,7 +4,6 @@ import LoginPage from './pages/LoginPage';
 
 import { AppShell } from './components/layout/AppShell';
 import { ComponentsDemo } from './demo/ComponentsDemo';
-import { Card } from './components/ui';
 
 // Клиентские страницы
 import ClientDashboard from './pages/client/ClientDashBoard';
@@ -16,7 +15,6 @@ import ClientProducts from './pages/client/ClientProducts';
 
 // Страницы сотрудника (создадим ниже)
 import EmployeeApplications from './pages/employee/EmployeeApplications';
-import EmployeeApplicationDetail from './pages/employee/EmployeeApplicationDetail';
 
 function ProtectedRoute({ children, allowedRole }) {
   const { user } = useAuth();

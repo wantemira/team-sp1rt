@@ -1,5 +1,6 @@
 const reasons = {
   AFFORDABLE_COUNTER_OFFER: 'Подготовили предложение с безопасной суммой.',
+  EMPLOYEE_APPROVED_AFFORDABLE: 'Сотрудник одобрил условия с учётом денежного потока.',
   AFFORDABLE_REQUEST: 'Запрошенная сумма одобрена.',
   EXTERNAL_CHECK_UNAVAILABLE: 'Источник временно не ответил. Сотрудник повторит проверку.',
   EXTERNAL_DATA_INCOMPLETE: 'Нужна дополнительная проверка данных сотрудником.',

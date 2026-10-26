@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { decisionText } from '../../lib/decisionText'
 import { Card, EmptyState, Field, InlineAlert, Tabs } from '../ui'
 import { StatusBadge } from '../ui/Badge'
 import { formatMoney } from '../../lib/format'
@@ -26,7 +27,7 @@ export function EmployeeApplicationCard({ application, onAction, busy = false })
   const general = <div className="stack">
     <div className="review-metrics"><MetricCard label="Запрошено" value={formatMoney(application.requested_amount)} hint={`Срок · ${application.requested_term_months} месяцев`} /><MetricCard label="Скоринг" value={application.score == null ? '—' : `${application.score} / 100`} hint="Демонстрационная оценка" /><MetricCard label="Риск-грейд" value={application.risk_grade || '—'} hint={application.scoring_result?.rules_version || 'Расчет не выполнен'} /></div>
     <CheckResults checks={application.checks} />
-    <InlineAlert title={application.decision_reason_code === 'EXTERNAL_CHECK_UNAVAILABLE' ? 'Требуется повторная проверка' : 'Заявка требует решения сотрудника'} tone={application.decision_reason_code === 'EXTERNAL_CHECK_UNAVAILABLE' ? 'warning' : 'info'}>{application.info_comment || 'Проверьте факторы оценки и данные компании перед решением.'}</InlineAlert>
+    <InlineAlert title={application.decision_reason_code === 'EXTERNAL_CHECK_UNAVAILABLE' ? 'Требуется повторная проверка' : application.status === 'MANUAL_REVIEW' ? 'Заявка требует решения сотрудника' : 'Результат рассмотрения'} tone={application.decision_reason_code === 'EXTERNAL_CHECK_UNAVAILABLE' ? 'warning' : 'info'}>{application.info_comment || decisionText(application.decision_reason_code)}</InlineAlert>
   </div>
   return <Card className="employee-detail" title={`${application.company_name} · №${application.id}`} action={<StatusBadge status={application.status} />}>
     <Tabs value={tab} onChange={setTab} items={[
