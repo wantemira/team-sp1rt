@@ -6,9 +6,25 @@ FastAPI для кредитного процесса, PostgreSQL для хран
 Внешние проверки ФНС/БКИ, подписание и выдача смоделированы;
 финансовые показатели синтетические, сумма и ставка рассчитываются сервером.
 
-Документы: [API](./Api.md), [обзорный OpenAPI](./api.yaml),
-[кредитная политика](./CREDIT_POLICY.md), [фронтенд](./frontend/README.md).
-Точная схема работающего сервера доступна на `/openapi.json`.
+## Материалы для проверки
+
+- [Архитектура и границы компонентов](./docs/ARCHITECTURE.md)
+- [Диаграмма состояний и разрешённые действия](./docs/APPLICATION_STATES.md)
+- [ER-схема, модель данных и миграции](./DB.md)
+- [Описание API](./Api.md), [пояснения backend](./BACKEND_API_GUIDE.md),
+  [структура модулей](./BACKEND_STRUCTURE.md)
+- [OpenAPI-снимок сервера](./api.yaml); живые `/openapi.json` и `/docs`
+- [Коллекция Postman и пошаговые сценарии](./docs/TEST_SCENARIOS.md)
+- [Кредитная политика и допущения](./CREDIT_POLICY.md)
+- [Закреплённые зависимости и обновление](./docs/DEPENDENCIES.md)
+- [Сторонние компоненты, лицензии и смоделированные интеграции](./THIRD_PARTY_NOTICES.md)
+- [Фронтенд и браузерные проверки](./frontend/README.md)
+
+Для общего запуска нужны Docker Engine и Docker Compose v2 с поддержкой
+`up --wait`. Отдельная установка Python/Node/PostgreSQL не нужна. Образы
+закреплены digest; рабочие и транзитивные библиотеки Python — точными версиями,
+frontend — package-lock.json. Тестовые зависимости Python устанавливаются
+отдельно из requirements-dev.txt.
 
 ## Backend architecture
 
@@ -100,7 +116,7 @@ deletes those volumes and is only appropriate for discarding a test stand.
 
 ## Run locally without Docker
 
-Use Python 3.12 or newer:
+Use Python 3.12.15 (see `.python-version`). The reference environment is the Linux Docker image:
 
 ```powershell
 python -m venv .venv
@@ -195,3 +211,11 @@ production Nginx. После `down` и повторного `up` с сохран
 черновик, принятые условия, история выдачи и исходные байты документа больше
 1 МиБ. Редкие конфликты в части браузерных тестов используют подмену ответов;
 основной путь, документы и ручное одобрение проходят через работающий API.
+
+
+После фиксации зависимостей повторно проверены сборка закреплённых образов,
+готовность трёх сервисов, `pip check` и 106 API-тестов с PostgreSQL. Рабочий
+образ не содержит pytest/httpx. Коллекция Postman прошла через тот же Nginx:
+27 запросов, 57 утверждений, без ошибок. Схемы Mermaid проверены парсингом
+и отображением в Chromium. Эти проверки дополняют предыдущий браузерный прогон;
+после изменений только документации браузерные тесты повторно не запускались.
