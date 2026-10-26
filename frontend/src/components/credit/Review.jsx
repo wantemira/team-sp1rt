@@ -5,6 +5,7 @@ import { StatusBadge } from '../ui/Badge'
 import { formatMoney } from '../../lib/format'
 import { ApplicationActions } from './ApplicationActions'
 import { MetricCard, StatusTimeline } from './Overview'
+import { CreditOffer } from './CreditOffer'
 export function ApplicationQueue({ applications = [], selectedId, onSelect, query, onQueryChange }) {
   const visible = applications.filter(item => `${item.company_name} ${item.client?.inn || ''} ${item.id}`.toLowerCase().includes(query.toLowerCase()))
   return <Card className="queue-card"><Field label="Поиск по компании или ИНН" type="search" value={query} onChange={event => onQueryChange(event.target.value)} placeholder="Найти заявку" />
@@ -27,6 +28,7 @@ export function EmployeeApplicationCard({ application, onAction, busy = false })
   const general = <div className="stack">
     <div className="review-metrics"><MetricCard label="Запрошено" value={formatMoney(application.requested_amount)} hint={`Срок · ${application.requested_term_months} месяцев`} /><MetricCard label="Скоринг" value={application.score == null ? '—' : `${application.score} / 100`} hint="Демонстрационная оценка" /><MetricCard label="Риск-грейд" value={application.risk_grade || '—'} hint={application.scoring_result?.rules_version || 'Расчет не выполнен'} /></div>
     <CheckResults checks={application.checks} />
+    <CreditOffer application={application} />
     <InlineAlert title={application.decision_reason_code === 'EXTERNAL_CHECK_UNAVAILABLE' ? 'Требуется повторная проверка' : application.status === 'MANUAL_REVIEW' ? 'Заявка требует решения сотрудника' : 'Результат рассмотрения'} tone={application.decision_reason_code === 'EXTERNAL_CHECK_UNAVAILABLE' ? 'warning' : 'info'}>{application.info_comment || decisionText(application.decision_reason_code)}</InlineAlert>
   </div>
   return <Card className="employee-detail" title={`${application.company_name} · №${application.id}`} action={<StatusBadge status={application.status} />}>

@@ -93,7 +93,7 @@ export default function ClientApplicationDetail() {
       </div>
       <Card title="Ход рассмотрения"><StatusTimeline history={app.status_history} /></Card>
     </div>
-    <Modal open={confirm && canSign} onClose={() => { if (!busy) setConfirm(false) }} title="Подтвердите условия">
+    <Modal open={confirm && canSign} dismissible={!busy} onClose={() => { if (!busy) setConfirm(false) }} title="Подтвердите условия">
       {confirm && canSign && <CreditOffer application={app} />}
       <Button loading={busy} onClick={() => perform('SIGN')}>Подтвердить согласие</Button>
     </Modal>

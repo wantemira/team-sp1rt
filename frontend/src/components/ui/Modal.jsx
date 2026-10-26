@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef } from 'react'
 import { Button } from './Button'
-export function Modal({ open, onClose, title, children }) {
+export function Modal({ open, onClose, title, children, dismissible = true }) {
   const ref = useRef(null)
   const id = useId()
   useEffect(() => {
@@ -9,11 +9,11 @@ export function Modal({ open, onClose, title, children }) {
     if (!open && dialog.open) dialog.close()
     return () => { if (dialog.open) dialog.close() }
   }, [open])
-  return <dialog ref={ref} className="modal" aria-labelledby={id} onCancel={event => { event.preventDefault(); onClose() }} onClick={event => {
-    if (event.target !== event.currentTarget) return
+  return <dialog ref={ref} className="modal" aria-labelledby={id} onCancel={event => { event.preventDefault(); if (dismissible) onClose() }} onClick={event => {
+    if (!dismissible || event.target !== event.currentTarget) return
     const rect = event.currentTarget.getBoundingClientRect()
     if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) onClose()
   }}>
-    <div className="modal__header"><h2 id={id}>{title}</h2><Button variant="ghost" onClick={onClose} aria-label="Закрыть окно">×</Button></div>{children}
+    <div className="modal__header"><h2 id={id}>{title}</h2><Button variant="ghost" disabled={!dismissible} onClick={onClose} aria-label="Закрыть окно">×</Button></div>{children}
   </dialog>
 }

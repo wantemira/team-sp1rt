@@ -24,3 +24,11 @@ export function validateLoan(values, product, submitting) {
   if (!product.terms.includes(Number(values.requested_term_months))) errors.requested_term_months = 'Выберите доступный срок кредита'
   return errors
 }
+
+export function approvalError(amount, requested, product) {
+  const normalized = normalizeMoneyInput(amount)
+  const upper = cents(requested) < cents(product.max_amount) ? requested : product.max_amount
+  return !normalized || cents(normalized) < cents(product.min_amount) || cents(normalized) > cents(upper)
+    ? `Сумма должна быть от ${formatMoney(product.min_amount)} до ${formatMoney(upper)} и не выше запрошенной`
+    : ''
+}

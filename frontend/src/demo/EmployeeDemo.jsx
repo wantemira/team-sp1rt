@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Button, EmptyState, FilterChips, InlineAlert, Modal } from '../components/ui'
 import { ApplicationQueue, EmployeeActionForm, EmployeeApplicationCard } from '../components/credit'
 import { PageHeader } from '../components/layout/AppShell'
-import { ACTIONS } from '../lib/contracts'
+import { ACTIONS, PRODUCT } from '../lib/contracts'
 import { demoQueue } from './fixtures'
 export function EmployeeDemo({ historyOnly = false }) {
   const [selectedId, setSelectedId] = useState(demoQueue[0].id)
@@ -24,7 +24,7 @@ export function EmployeeDemo({ historyOnly = false }) {
       <div className="queue-layout"><ApplicationQueue applications={visible} selectedId={selected?.id} onSelect={id => { setSelectedId(id); setMessage('') }} query={query} onQueryChange={setQuery} /><EmployeeApplicationCard key={selected?.id || 'empty'} application={selected} onAction={handleAction} /></div>
     </>}
     <Modal open={Boolean(action)} onClose={() => setAction(null)} title={ACTIONS[action]?.label || 'Действие сотрудника'}>
-      {action && selected && <EmployeeActionForm key={`${selected.id}-${action}`} action={action} application={selected} onSubmit={payload => { setMessage(`Демонстрация: действие ${payload.action}, заявка №${selected.id}, version=${payload.version}. Решение на сервер не отправлено.`); setAction(null) }} />}
+      {action && selected && <EmployeeActionForm key={`${selected.id}-${action}`} action={action} application={{ ...selected, product_type: 'term_loan' }} catalog={{ products: [{ ...PRODUCT, id: 'term_loan' }] }} onSubmit={payload => { setMessage(`Демонстрация: действие ${payload.action}, заявка №${selected.id}, version=${payload.version}. Решение на сервер не отправлено.`); setAction(null) }} />}
       <Button variant="ghost" onClick={() => setAction(null)}>Отмена</Button>
     </Modal>
   </>
