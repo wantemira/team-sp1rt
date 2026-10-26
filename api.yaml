@@ -1,15 +1,11 @@
 
-<<<<<<< Updated upstream
-# 1. POST /auth/login            → token (client)
-# 2. GET  /products              → выбрать product_id
-# 3. POST /applications          → draft
-# 4. PATCH /applications/{id}    → заполнить сумму/срок/бизнес
-# 5. POST /applications/{id}/submit
-# 6. GET  /applications/{id}/status   (polling) → checking
-# 7. GET  /applications/{id}/status   → approved / rejected / needs_info
-#    ├─ needs_info → PATCH → POST /submit → снова к шагу 6
-#    └─ approved   → POST /applications/{id}/sign
-=======
+# Client flow: create a DRAFT, edit it, then synchronously run external checks and scoring.
+openapi: 3.0.3
+info:
+  title: Alfa Smart Credit API
+  version: 1.0.0
+servers:
+  - url: http://localhost:8000/api/v1
 tags:
   - name: Auth
     description: Вход и данные текущего пользователя
@@ -74,12 +70,54 @@ paths:
   # ==========================================
   # КЛИЕНТСКИЕ ЭНДПОИНТЫ
   # ==========================================
+  /products:
+    get:
+      tags: [Client]
+      summary: Доступный продукт MVP
+      responses:
+        '200':
+          description: Единственный кредитный продукт MVP
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Product'
+
   /applications:
+    get:
+      tags: [Client]
+      summary: Список всех заявок текущего клиента
+      description: Возвращает все заявки профиля клиента, включая черновики.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Список заявок текущего клиента
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ApplicationStatusResponse'
+        '401':
+          description: Токен отсутствует, недействителен или просрочен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Пользователь не является клиентом
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     post:
       tags: [Client]
-      summary: Создание и подача кредитной заявки
+      summary: Создание черновика кредитной заявки
       description: >-
-        Клиент заполняет форму, заявка уходит в обработку. client_id определяется
+        Создаёт заявку в статусе DRAFT. Для создания достаточно product_type.
+        Сумма, срок и финансовые данные заполняются позже. client_id определяется
         по профилю clients, связанному с users.id из проверенного JWT.
       security:
         - BearerAuth: []
@@ -91,7 +129,7 @@ paths:
               $ref: '#/components/schemas/CreateApplicationRequest'
       responses:
         '201':
-          description: Заявка успешно создана
+          description: Черновик создан
           content:
             application/json:
               schema:
@@ -155,15 +193,134 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-
-  /applications/{id}/fill:
     patch:
       tags: [Client]
-      summary: Дозаполнение данных по заявке
+      summary: Редактирование черновика
+      description: Изменяет данные только собственной заявки со статусом DRAFT. version обязателен для защиты от перезаписи чужих изменений.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchApplicationRequest'
+      responses:
+        '200':
+          description: Черновик обновлён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationStatusResponse'
+        '401':
+          description: Токен отсутствует, недействителен или просрочен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Пользователь не является владельцем заявки или не является клиентом
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Ошибка проверки входных данных
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Заявка не в статусе DRAFT или версия устарела
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /applications/{id}/submit:
+    post:
+      tags: [Client]
+      summary: Отправка черновика на проверку
       description: >-
-        Используется, если статус заявки - NEEDS_INFO. Клиент может менять только
-        свою заявку. Бизнес-данные сохраняются в applications.business_data,
-        документы — в application_documents.
+        Синхронно проверяет права, версию и состояние; вызывает моки ФНС/БКИ и
+        evaluate_credit; сохраняет проверки, score, итоговый статус и историю
+        одной транзакцией. Сумма должна быть 100000–5000000 рублей, срок — 6,
+        12 или 24 месяца.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: version
+          in: query
+          required: false
+          deprecated: true
+          schema:
+            type: integer
+            minimum: 1
+          description: Совместимость; основной контракт передаёт version в JSON.
+      requestBody:
+        required: false
+        description: Передайте JSON с version; старый query поддерживается временно. Отсутствие версии или конфликт значений возвращает 422.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplicationVersion'
+      responses:
+        '200':
+          description: Заявка отправлена на проверку
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationStatusResponse'
+        '401':
+          description: Токен отсутствует, недействителен или просрочен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Пользователь не является клиентом
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Заявка не найдена или недоступна текущему клиенту
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Заявка не в статусе DRAFT или версия устарела
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Сумма или срок отсутствуют либо не соответствуют ограничениям продукта
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /applications/{id}/fill:
+    post:
+      tags: [Client]
+      summary: Заполнение финансовых данных и повторная оценка
+      description: >-
+        Доступно владельцу заявки только в NEEDS_INFO. Необходимо заполнить все
+        поля из missing_fields. Дополняет business_data, выполняет полный повтор
+        ФНС/БКИ и evaluate_credit и атомарно сохраняет проверки, итог и историю.
       security:
         - BearerAuth: []
       parameters:
@@ -179,6 +336,12 @@ paths:
             schema:
               $ref: '#/components/schemas/FillApplicationRequest'
       responses:
+        '200':
+          description: Карточка заявки с результатами повторных проверок
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationStatusResponse'
         '401':
           description: Токен отсутствует, недействителен или просрочен
           content:
@@ -186,31 +349,89 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Пользователь не является владельцем заявки или не является клиентом
+          description: Пользователь не является клиентом
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-        '200':
-          description: Данные приняты, заявка снова в обработке.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApplicationStatusResponse'
-        '400':
-          description: Бизнес-ошибка при обработке заявки
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '422':
-          description: Ошибка проверки входных данных
+        '404':
+          description: Заявка не найдена или недоступна текущему клиенту
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
-          description: Заявка не находится в статусе NEEDS_INFO
+          description: Заявка не в NEEDS_INFO или версия устарела
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Финансовые данные отсутствуют или некорректны
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /applications/{id}/sign:
+    post:
+      tags: [Client]
+      summary: Подписание и выдача одобренного кредита
+      description: >-
+        Только владелец заявки со статусом APPROVED. Атомарно переводит заявку
+        в ISSUED и записывает signed_at, issued_at и историю. Это имитация
+        подписания и выдачи; реальная ЭП и перевод денег не выполняются. Статуса
+        SIGNED нет.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: version
+          in: query
+          required: false
+          deprecated: true
+          schema:
+            type: integer
+            minimum: 1
+          description: Совместимость; основной контракт передаёт version в JSON.
+      requestBody:
+        required: false
+        description: Передайте JSON с version; старый query поддерживается временно. Отсутствие версии или конфликт значений возвращает 422.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplicationVersion'
+      responses:
+        '200':
+          description: Заявка переведена из APPROVED в ISSUED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationStatusResponse'
+        '401':
+          description: Токен отсутствует, недействителен или просрочен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Пользователь не является клиентом
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Заявка не найдена или недоступна текущему клиенту
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Заявка не в APPROVED или версия устарела
           content:
             application/json:
               schema:
@@ -346,7 +567,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [MANUAL_REVIEW, CHECKING, NEEDS_INFO]
+            enum: [MANUAL_REVIEW, CHECKING, NEEDS_INFO, APPROVED, REJECTED, ISSUED]
             default: MANUAL_REVIEW
       responses:
         '401':
@@ -414,8 +635,11 @@ paths:
       tags: [Employee]
       summary: Действие сотрудника по заявке
       description: >-
-        Доступна только пользователям с users.role = employee. changed_by
-        в application_status_history определяется сервером из авторизованного пользователя.
+        Доступно только сотрудникам при рассмотрении кредитного риска после
+        успешного завершения обязательных проверок. Для сбоя или некорректных данных
+        доступен только retry-checks. При APPROVE действуют стоп-факторы,
+        сумма ограничена запрошенной, лимитами продукта и DSCR 1.35; ставка
+        рассчитывается сервером по сохранённым проверкам. ID сотрудника и комментарий сохраняются в истории.
       security:
         - BearerAuth: []
       parameters:
@@ -461,6 +685,83 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Решение недоступно до успешных обязательных проверок, при стоп-факторах, неверном статусе или устаревшей версии
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Некорректные поля действия или сумма одобрения
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /employee/applications/{id}/retry-checks:
+    post:
+      tags: [Employee]
+      summary: Повтор технически неуспешных проверок
+      description: >-
+        Доступно в MANUAL_REVIEW, если последние ответы источников недоступны,
+        неполны или некорректны (EXTERNAL_CHECK_UNAVAILABLE,
+        EXTERNAL_DATA_INCOMPLETE, INVALID_SOURCE_DATA). Новые проверки, результат,
+        статус и история сохраняются одной транзакцией. Повторный сбой оставляет
+        техническую причину и не превращается в кредитный отказ.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: version
+          in: query
+          required: false
+          deprecated: true
+          schema:
+            type: integer
+            minimum: 1
+          description: Совместимость; основной контракт передаёт version в JSON.
+      requestBody:
+        required: false
+        description: Передайте JSON с version; старый query поддерживается временно. Отсутствие версии или конфликт значений возвращает 422.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplicationVersion'
+      responses:
+        '200':
+          description: Карточка заявки с результатом повторных проверок
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationStatusResponse'
+        '401':
+          description: Токен отсутствует, недействителен или просрочен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Пользователь не является сотрудником
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Заявка не найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Неверный статус, нет неуспешных проверок или версия устарела
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
 # ==========================================
 # СХЕМЫ ДАННЫХ (DTO)
@@ -477,6 +778,95 @@ components:
         applications.client_id; операции сотрудника требуют role=employee.
 
   schemas:
+    ApplicationVersion:
+      type: object
+      additionalProperties: false
+      required:
+      - version
+      properties:
+        version:
+          type: integer
+          minimum: 1
+    CreditOffer:
+      type: object
+      required:
+      - kind
+      - amount
+      - annual_rate_pct
+      - term_months
+      - monthly_payment
+      - dscr
+      - requested_dscr
+      - target_dscr
+      - monthly_cash_flow
+      - existing_debt_payments
+      - max_total_debt_service
+      - explanation
+      properties:
+        kind:
+          type: string
+          enum:
+          - ORIGINAL
+          - COUNTER_OFFER
+        amount:
+          type: string
+        annual_rate_pct:
+          type: string
+          description: 'Проценты годовых: строка 20.0000 означает 20%.'
+        term_months:
+          type: integer
+          enum:
+          - 6
+          - 12
+          - 24
+        monthly_payment:
+          type: string
+        dscr:
+          type: string
+          description: Покрытие платежей на окончательных условиях, не ниже 1.35.
+        requested_dscr:
+          type: string
+        target_dscr:
+          type: string
+        monthly_cash_flow:
+          type: string
+        existing_debt_payments:
+          type: string
+        max_total_debt_service:
+          type: string
+        explanation:
+          type: string
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+          enum: [term_loan]
+        name:
+          type: string
+          example: Кредит на оборотные средства
+        min_amount:
+          type: string
+          example: "100000.00"
+          description: Рубли; денежные значения передаются строками.
+        max_amount:
+          type: string
+          example: "5000000.00"
+        terms:
+          type: array
+          items:
+            type: integer
+            enum: [6, 12, 24]
+        disbursement_count:
+          type: integer
+          enum: [1]
+        term_type:
+          type: string
+          enum: [fixed]
+        repayment_type:
+          type: string
+          enum: [annuity]
+
     LoginRequest:
       type: object
       required: [email, password]
@@ -570,23 +960,24 @@ components:
 
     CreateApplicationRequest:
       type: object
-      required:
-        - product_type
-        - requested_amount
-        - requested_term_months
-        - business_data
-      description: ИНН и название компании берутся из профиля clients, а не из business_data заявки.
+      required: [product_type]
+      additionalProperties: false
+      description: Для создания черновика достаточно product_type=term_loan.
       properties:
         product_type:
           type: string
-          enum: [credit_line, overdraft, term_loan]
-          example: "credit_line"
+          enum: [term_loan]
+          example: term_loan
         requested_amount:
-          type: number
-          format: double
-          example: 1500000
+          type: string
+          nullable: true
+          pattern: '^\d+(\.\d{1,2})?$'
+          example: "1500000.00"
+          description: Рубли; от 100000.00 до 5000000.00.
         requested_term_months:
           type: integer
+          nullable: true
+          enum: [6, 12, 24]
           example: 12
         purpose:
           type: string
@@ -594,27 +985,90 @@ components:
           example: "Пополнение оборотных средств"
         business_data:
           type: object
-          description: >-
-            Дополнительные финансовые и бизнес-сведения, введённые клиентом,
-            сохраняемые в applications.business_data. Сведения, полученные
-            сервером из ФНС, ЕГРЮЛ, ЕГРИП или БКИ, записываются в
-            application_checks.response_data.
-          additionalProperties: true
+          additionalProperties: false
+          description: 'Финансовые данные. Если их не передать, сервер сохранит {"financials": {}}.'
+          default:
+            financials: {}
+          properties:
+            financials:
+              type: object
+              additionalProperties: false
+              properties:
+                annual_revenue:
+                  type: string
+                  nullable: true
+                annual_expenses:
+                  type: string
+                  nullable: true
           example:
             financials:
-              annual_revenue: 5000000
-              monthly_expenses: 300000
-            existing_obligations: []
+              annual_revenue: "5000000.00"
+              annual_expenses: "300000.00"
+
+    PatchApplicationRequest:
+      type: object
+      required: [version]
+      minProperties: 2
+      additionalProperties: false
+      properties:
+        version:
+          type: integer
+          minimum: 1
+          description: Текущая версия заявки из предыдущего ответа.
+        requested_amount:
+          type: string
+          nullable: true
+          pattern: '^\d+(\.\d{1,2})?$'
+          description: Рубли; от 100000.00 до 5000000.00.
+        requested_term_months:
+          type: integer
+          nullable: true
+          enum: [6, 12, 24]
+        purpose:
+          type: string
+          nullable: true
+          maxLength: 500
+        business_data:
+          type: object
+          additionalProperties: false
+          properties:
+            financials:
+              type: object
+              additionalProperties: false
+              properties:
+                annual_revenue:
+                  type: string
+                  nullable: true
+                annual_expenses:
+                  type: string
+                  nullable: true
 
     FillApplicationRequest:
       type: object
-      required: [business_data]
+      required: [version, business_data]
+      additionalProperties: false
       properties:
+        version:
+          type: integer
+          minimum: 1
         business_data:
           type: object
-          minProperties: 1
-          description: Обязательные непустые дополняемые данные, сохраняемые в applications.business_data.
-          additionalProperties: true
+          additionalProperties: false
+          required: [financials]
+          properties:
+            financials:
+              type: object
+              additionalProperties: false
+              minProperties: 1
+              properties:
+                annual_revenue:
+                  type: string
+                  nullable: true
+                  pattern: '^\d+(\.\d{1,2})?$'
+                annual_expenses:
+                  type: string
+                  nullable: true
+                  pattern: '^\d+(\.\d{1,2})?$'
 
     UploadApplicationDocumentRequest:
       type: object
@@ -633,30 +1087,47 @@ components:
 
     EmployeeActionRequest:
       type: object
-      required:
-        - action
+      additionalProperties: false
+      required: [action, version, comment]
+      description: Условия кредита допустимы только для APPROVE, missing_fields только для REQUEST_INFO. Для REJECT и REQUEST_INFO обязателен непустой decision_reason_code.
       properties:
         action:
           type: string
           enum: [APPROVE, REJECT, REQUEST_INFO]
           example: "APPROVE"
+        version:
+          type: integer
+          minimum: 1
+          description: Текущая версия заявки из последнего ответа.
+        missing_fields:
+          type: array
+          nullable: true
+          items:
+            type: string
+            enum:
+              - business_data.financials.annual_revenue
+              - business_data.financials.annual_expenses
+          description: Обязателен для REQUEST_INFO; сохраняется в applications.missing_fields.
         decision_reason_code:
           type: string
           nullable: true
           description: Сохраняется в applications.decision_reason_code; обязателен для REJECT или REQUEST_INFO.
           example: "HIGH_DEBT_LOAD"
         approved_amount:
-          type: number
+          type: string
           nullable: true
-          description: Сохраняется в applications.approved_amount.
-          example: 1000000
+          description: Сумма в рублях, сохраняется в applications.approved_amount.
+          example: "1000000.00"
         approved_rate:
-          type: number
+          type: string
           nullable: true
-          description: Сохраняется в applications.approved_rate.
-          example: 15.5
+          description: Рассчитанная сервером ставка; переданное значение должно совпасть с расчётом.
+          example: "20.1200"
         comment:
           type: string
+          minLength: 1
+          maxLength: 4000
+          description: Обязателен для каждого решения; пробелы по краям удаляются.
           example: "Снизили лимит из-за долговой нагрузки"
 
     ApplicationStatusResponse:
@@ -667,24 +1138,62 @@ components:
           description: Идентификатор из applications.id.
         product_type:
           type: string
-          enum: [credit_line, overdraft, term_loan]
+          enum: [term_loan]
         requested_amount:
-          type: number
+          type: string
+          nullable: true
+          example: "1500000.00"
         requested_term_months:
           type: integer
+          nullable: true
         purpose:
           type: string
           nullable: true
         status:
           type: string
-          enum: [DRAFT, CHECKING, NEEDS_INFO, MANUAL_REVIEW, APPROVED, REJECTED]
+          enum: [DRAFT, CHECKING, NEEDS_INFO, MANUAL_REVIEW, APPROVED, REJECTED, ISSUED]
           example: "CHECKING"
+        version:
+          type: integer
+          minimum: 1
+          description: >-
+            Начинается с 1 и атомарно увеличивается при изменении заявки.
+            Optimistic locking возвращает 409 при устаревшей версии.
         business_data:
           type: object
-          additionalProperties: true
+          properties:
+            financials:
+              type: object
+              properties:
+                annual_revenue:
+                  type: string
+                  nullable: true
+                annual_expenses:
+                  type: string
+                  nullable: true
+        next_actions:
+          type: array
+          description: >-
+            Действия, вычисленные для роли текущего пользователя и состояния:
+            клиент DRAFT=[EDIT,SUBMIT], NEEDS_INFO=[FILL], APPROVED=[SIGN];
+            сотрудник MANUAL_REVIEW при кредитном рассмотрении=
+            [APPROVE,REJECT,REQUEST_INFO], при непригодных данных источников=
+            [RETRY_CHECKS]; остальные сочетания возвращают пустой список.
+          items:
+            type: string
+            enum: [EDIT, SUBMIT, FILL, APPROVE, REJECT, REQUEST_INFO, RETRY_CHECKS, SIGN]
+        missing_fields:
+          type: array
+          items:
+            type: string
+        info_comment:
+          type: string
+          nullable: true
         score:
           type: integer
           nullable: true
+          minimum: 0
+          maximum: 100
         risk_grade:
           type: string
           enum: [A, B, C, D, E]
@@ -692,12 +1201,35 @@ components:
         decision_reason_code:
           type: string
           nullable: true
+        scoring_result:
+          type: object
+          nullable: true
+          description: >-
+            Полный JSON результата расчета: модель, статус, score, reason_code,
+            входные данные проверок и финансов, факторы принятия решения.
         approved_amount:
-          type: number
+          type: string
           nullable: true
         approved_rate:
-          type: number
+          type: string
           nullable: true
+          example: "20.1200"
+          description: Ставка в процентах годовых, рассчитанная сервером.
+        offer:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/CreditOffer'
+          description: Рассчитанное предложение; доступно в APPROVED и ISSUED.
+        signed_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Время демонстрационной фиксации подписания.
+        issued_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Время демонстрационной фиксации выдачи вместе с подписанием.
         created_at:
           type: string
           format: date-time
@@ -709,6 +1241,11 @@ components:
           description: Документы этой заявки и их статус обработки.
           items:
             $ref: '#/components/schemas/ApplicationDocument'
+        checks:
+          type: array
+          description: Сохранённые результаты ФНС и БКИ, включая все попытки.
+          items:
+            $ref: '#/components/schemas/ApplicationCheck'
         status_history:
           type: array
           description: >-
@@ -727,8 +1264,9 @@ components:
           type: string
           example: "ООО Ромашка"
         requested_amount:
-          type: number
-          example: 1500000
+          type: string
+          example: "1500000.00"
+          nullable: true
         risk_grade:
           type: string
           example: "C"
@@ -749,6 +1287,10 @@ components:
         status:
           type: string
           example: "MANUAL_REVIEW"
+        version:
+          type: integer
+          minimum: 1
+          description: Начинается с 1; атомарно увеличивается при изменении заявки.
         created_at:
           type: string
           format: date-time
@@ -773,17 +1315,41 @@ components:
               enum: [INDIVIDUAL, LEGAL_ENTITY]
         product_type:
           type: string
-          enum: [credit_line, overdraft, term_loan]
+          enum: [term_loan]
         requested_amount:
-          type: number
+          type: string
+          nullable: true
         requested_term_months:
           type: integer
+          nullable: true
         purpose:
           type: string
           nullable: true
         business_data:
           type: object
-          additionalProperties: true
+          properties:
+            financials:
+              type: object
+              properties:
+                annual_revenue:
+                  type: string
+                  nullable: true
+                annual_expenses:
+                  type: string
+                  nullable: true
+        next_actions:
+          type: array
+          description: Доступные действия сотрудника для текущего состояния заявки.
+          items:
+            type: string
+            enum: [EDIT, SUBMIT, FILL, APPROVE, REJECT, REQUEST_INFO, RETRY_CHECKS, SIGN]
+        missing_fields:
+          type: array
+          items:
+            type: string
+        info_comment:
+          type: string
+          nullable: true
         score:
           type: integer
           nullable: true
@@ -794,11 +1360,23 @@ components:
         decision_reason_code:
           type: string
           nullable: true
+        scoring_result:
+          type: object
+          nullable: true
+          description: Полный JSON результата скоринга с входами и факторами расчета.
         approved_amount:
-          type: number
+          type: string
           nullable: true
         approved_rate:
-          type: number
+          type: string
+          nullable: true
+        signed_at:
+          type: string
+          format: date-time
+          nullable: true
+        issued_at:
+          type: string
+          format: date-time
           nullable: true
         checks:
           type: array
@@ -828,12 +1406,34 @@ components:
           type: string
           enum: [SUCCESS, TIMEOUT, ERROR]
         response_data:
-          type: object
-          additionalProperties: true
+          oneOf:
+            - $ref: '#/components/schemas/FNSCheckResponse'
+            - $ref: '#/components/schemas/BKICheckResponse'
           nullable: true
         created_at:
           type: string
           format: date-time
+
+    FNSCheckResponse:
+      type: object
+      properties:
+        is_active:
+          type: boolean
+          nullable: true
+        business_age_months:
+          type: integer
+          nullable: true
+
+    BKICheckResponse:
+      type: object
+      properties:
+        current_overdue_days:
+          type: integer
+          nullable: true
+        monthly_debt_payments:
+          type: string
+          nullable: true
+          description: Сумма в рублях, JSON string.
 
     ApplicationDocument:
       type: object
@@ -867,6 +1467,10 @@ components:
         changed_by:
           type: string
           enum: [CLIENT, SYSTEM, EMPLOYEE]
+        changed_by_user_id:
+          type: integer
+          nullable: true
+          description: ID пользователя, выполнившего переход; для SYSTEM равен null.
         comment:
           type: string
           nullable: true
@@ -887,4 +1491,3 @@ components:
         details:
           type: object
           nullable: true
->>>>>>> Stashed changes

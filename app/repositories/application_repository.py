@@ -30,6 +30,16 @@ def get_client_application(
     return db.scalar(statement)
 
 
+def get_client_applications(db: Session, client_id: int) -> list[Application]:
+    statement = (
+        select(Application)
+        .options(*_application_details)
+        .where(Application.client_id == client_id)
+        .order_by(Application.created_at.desc(), Application.id.desc())
+    )
+    return list(db.scalars(statement).unique())
+
+
 def get_employee_application(db: Session, application_id: int) -> Application | None:
     statement = (
         select(Application)

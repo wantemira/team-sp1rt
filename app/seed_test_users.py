@@ -14,6 +14,8 @@ CLIENT_ACCOUNTS = (
     ("test.client1@example.com", "7700000001", "Test Client 1"),
     ("test.client2@example.com", "7700000002", "Test Client 2"),
     ("test.client3@example.com", "7700000003", "Test Client 3"),
+    ("demo.ip@example.com", "770000000001", "ИП Алексей Демонстрационный"),
+    ("demo.review@example.com", "770000000002", "ИП Мария Ручное рассмотрение"),
 )
 EMPLOYEE_ACCOUNTS = (
     ("test.employee1@example.com", "Test Employee 1"),
@@ -36,7 +38,7 @@ def seed_test_users(db: Session, password: str) -> tuple[int, int]:
             user.client_profile = Client(
                 inn=inn,
                 company_name=company_name,
-                client_type="LEGAL_ENTITY",
+                client_type="INDIVIDUAL" if len(inn) == 12 else "LEGAL_ENTITY",
             )
             clients_created += 1
 
