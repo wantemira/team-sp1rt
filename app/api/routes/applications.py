@@ -18,6 +18,8 @@ from app.schemas.applications import (
 )
 from app.services import application_service
 from app.schemas.products import ProductResponse
+from app.schemas.news import NewsItem
+from app.services.news_service import get_client_news
 
 router = APIRouter(tags=["Client"])
 
@@ -35,14 +37,13 @@ def get_products() -> list[dict]:
         "repayment_type": "annuity",
     }]
 
-@router.get("/news")
-def get_news(user: User = Depends(get_current_client)):
-    """Статическая синтетическая новость для кабинета клиента."""
-    return [{
-        "id": 1, 
-        "title": "Добро пожаловать!", 
-        "text": "Вы можете подать заявку на кредит до 5 млн рублей."
-    }]
+@router.get("/news", response_model=list[NewsItem])
+def get_news(
+    user: User = Depends(get_current_client),
+    db: Session = Depends(get_db),
+) -> list[NewsItem]:
+    """Синтетические материалы по профилю клиента и его последней заявке."""
+    return get_client_news(db, user)
 
 
 @router.post("/applications", response_model=ApplicationResponse, status_code=status.HTTP_201_CREATED)

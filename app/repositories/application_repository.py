@@ -16,6 +16,15 @@ def get_client_profile(db: Session, user_id: int) -> Client | None:
     return db.scalar(select(Client).where(Client.user_id == user_id))
 
 
+def get_latest_client_application(db: Session, client_id: int) -> Application | None:
+    return db.scalar(
+        select(Application)
+        .where(Application.client_id == client_id)
+        .order_by(Application.created_at.desc(), Application.id.desc())
+        .limit(1)
+    )
+
+
 def get_client_application(
     db: Session, application_id: int, client_id: int
 ) -> Application | None:

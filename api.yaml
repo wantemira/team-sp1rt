@@ -97,14 +97,18 @@ paths:
       tags:
       - Client
       summary: Get News
-      description: Статическая синтетическая новость для кабинета клиента.
+      description: Синтетические материалы по профилю клиента и его последней заявке.
       operationId: get_news_api_v1_news_get
       responses:
         '200':
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                items:
+                  $ref: '#/components/schemas/NewsItem'
+                type: array
+                title: Response Get News Api V1 News Get
         '422':
           description: Некорректные поля или действие
           content:
@@ -1525,6 +1529,31 @@ components:
       - expires_in
       - user
       title: LoginResponse
+    NewsItem:
+      properties:
+        id:
+          type: string
+          title: Id
+        title:
+          type: string
+          title: Title
+        excerpt:
+          type: string
+          title: Excerpt
+        body:
+          type: string
+          title: Body
+        relevance:
+          type: string
+          title: Relevance
+      type: object
+      required:
+      - id
+      - title
+      - excerpt
+      - body
+      - relevance
+      title: NewsItem
     ProductResponse:
       properties:
         id:
