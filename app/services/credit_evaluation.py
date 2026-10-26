@@ -1,7 +1,7 @@
 """Adapt source responses to the pure calculation and choose a workflow outcome."""
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any, Literal
 
@@ -32,6 +32,8 @@ class CreditEvaluation:
 def evaluate_credit(
     application: Application, fns_result: FNSResult, bki_result: BKIResult,
     *, calculated_at: datetime | None = None,
+    approved_amount_limit: Decimal | None = None,
+    manual_approval: bool = False,
 ) -> CreditEvaluation:
     calculated_at = calculated_at or datetime.now(timezone.utc)
     financials = application.business_data.get("financials") or {}
@@ -89,13 +91,14 @@ def evaluate_credit(
         return result("MANUAL_REVIEW", "INVALID_SOURCE_DATA")
     if business.monthly_cash_flow <= 0:
         return result("REJECTED", "NON_POSITIVE_CASH_FLOW")
-    loan = affordable_loan(business, application.requested_amount, application.requested_term_months)
+    limit = min(application.requested_amount, approved_amount_limit) if approved_amount_limit is not None else application.requested_amount
+    loan = affordable_loan(business, limit, application.requested_term_months)
     if loan is None:
         return result("REJECTED", "NO_AFFORDABLE_PRODUCT_AMOUNT")
     # Decisions use unrounded scores so display rounding cannot cross a threshold.
     if loan.score < 40:
         return result("REJECTED", "SCORE_BELOW_APPROVAL_THRESHOLD", loan=loan)
-    if loan.score < APPROVE_SCORE_MIN:
+    if loan.score < APPROVE_SCORE_MIN and not manual_approval:
         return result("MANUAL_REVIEW", "SCORE_REQUIRES_MANUAL_REVIEW", loan=loan)
     counter = loan.amount < application.requested_amount
     requested = price_loan(business, application.requested_amount, application.requested_term_months)
@@ -115,7 +118,33 @@ def evaluate_credit(
             if counter else "Денежный поток позволяет обслуживать запрошенную сумму с запасом."
         ),
     }
-    return result("APPROVED", "AFFORDABLE_COUNTER_OFFER" if counter else "AFFORDABLE_REQUEST", loan=loan, offer=offer)
+    reason = "EMPLOYEE_APPROVED_AFFORDABLE" if manual_approval else "AFFORDABLE_COUNTER_OFFER" if counter else "AFFORDABLE_REQUEST"
+    return result("APPROVED", reason, loan=loan, offer=offer)
+
+
+def evaluate_manual_offer(application: Application, checks: dict, amount: Decimal) -> CreditEvaluation:
+    """Повторный расчёт условий по сохранённым проверкам, без вызовов моков."""
+    fns_check, bki_check = checks["FNS"], checks["BKI"]
+    fns, bki = fns_check.response_data or {}, bki_check.response_data or {}
+    try:
+        registration = fns.get("registration_date")
+        fns_result = FNSResult(
+            status=fns_check.status, is_active=fns.get("is_active"),
+            business_age_months=fns.get("business_age_months"),
+            registration_date=date.fromisoformat(registration) if registration else None,
+            okved=fns.get("okved", ""), annual_revenue=fns.get("annual_revenue"),
+            annual_operating_expenses=fns.get("annual_operating_expenses"),
+        )
+        bki_result = BKIResult(
+            status=bki_check.status, current_overdue_days=bki.get("current_overdue_days"),
+            monthly_debt_payments=bki.get("monthly_debt_payments"),
+            total_payments_12m=bki.get("total_payments_12m"),
+            delayed_payments_12m=bki.get("delayed_payments_12m"),
+        )
+        return evaluate_credit(application, fns_result, bki_result,
+                               approved_amount_limit=amount, manual_approval=True)
+    except (TypeError, ValueError, InvalidOperation):
+        return CreditEvaluation("MANUAL_REVIEW", None, "INVALID_SOURCE_DATA")
 
 
 def status_for_score(score: int) -> CreditStatus:

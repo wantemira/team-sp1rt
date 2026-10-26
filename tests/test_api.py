@@ -496,7 +496,7 @@ def test_fill_requires_each_requested_field(client: TestClient, monkeypatch: pyt
     assert filled.json()["business_data"]["financials"]["annual_expenses"] == "0.00"
 
 
-def test_manual_approval_uses_fixed_rate_and_sign_records_issuance(
+def test_manual_approval_calculates_safe_terms_and_sign_records_issuance(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     with TestSession() as db:
@@ -555,7 +555,11 @@ def test_manual_approval_uses_fixed_rate_and_sign_records_issuance(
     )
     assert decision.status_code == 200
     assert decision.json()["status"] == "APPROVED"
-    assert decision.json()["approved_rate"] == "28.0000"
+    from decimal import Decimal
+    assert Decimal("20") <= Decimal(decision.json()["approved_rate"]) <= Decimal("25.4")
+    assert decision.json()["offer"]["amount"] == "1000000.00"
+    assert Decimal(decision.json()["offer"]["dscr"]) >= Decimal("1.35")
+    assert decision.json()["scoring_result"]["automated_assessment"]["status"] == "MANUAL_REVIEW"
     assert decision.json()["status_history"][-1]["changed_by_user_id"] == employee_id
 
     issued = client.post(
@@ -1113,3 +1117,29 @@ def test_openapi_describes_typed_offer_and_json_versions(client: TestClient) -> 
         assert "application/json" in post["requestBody"]["content"]
         version = next(param for param in post["parameters"] if param["name"] == "version")
         assert version["deprecated"] and not version["required"]
+
+
+def test_employee_cannot_override_affordability_or_rate(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    from decimal import Decimal
+    with TestSession() as db:
+        seed_test_users(db, "local-test-password")
+        db.commit()
+    monkeypatch.setattr(application_service, "evaluate_credit", lambda *_args: CreditEvaluation(
+        "MANUAL_REVIEW", 60, "SCORE_REQUIRES_MANUAL_REVIEW"))
+    client_headers = {"Authorization": f"Bearer {bearer_token(client, 'demo.ip@example.com', 'local-test-password')}"}
+    created = client.post("/api/v1/applications", headers=client_headers, json={
+        "product_type": "term_loan", "requested_amount": "1000000.00", "requested_term_months": 24,
+    }).json()
+    submitted = client.post(f"/api/v1/applications/{created['id']}/submit", headers=client_headers, json={"version": 1}).json()
+    employee_headers = {"Authorization": f"Bearer {bearer_token(client, 'test.employee1@example.com', 'local-test-password')}"}
+    action_path = f"/api/v1/employee/applications/{created['id']}/action"
+    payload = {"action": "APPROVE", "version": submitted["version"], "approved_amount": "1000000.00", "comment": "Проверил денежный поток."}
+    assert client.post(action_path, headers=employee_headers, json=payload).status_code == 422
+    payload["approved_amount"] = "500000.00"
+    assert client.post(action_path, headers=employee_headers, json={**payload, "approved_rate": "1.00"}).status_code == 422
+    approved = client.post(action_path, headers=employee_headers, json=payload)
+    assert approved.status_code == 200
+    assert approved.json()["offer"]["kind"] == "COUNTER_OFFER"
+    assert Decimal(approved.json()["offer"]["dscr"]) >= Decimal("1.35")
+    assert approved.json()["approved_amount"] == "500000.00"
+    assert len(approved.json()["checks"]) == 2

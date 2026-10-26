@@ -30,7 +30,7 @@ from app.schemas.applications import (
     EmployeeApplicationShort,
     QueueStatus,
 )
-from app.services.credit_evaluation import evaluate_credit
+from app.services.credit_evaluation import evaluate_credit, evaluate_manual_offer
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,6 @@ FINANCIAL_FIELD_PATHS = {
     "business_data.financials.annual_revenue": "annual_revenue",
     "business_data.financials.annual_expenses": "annual_expenses",
 }
-ANNUAL_INTEREST_RATE = Decimal("28.0000")
 
 
 def _commit(db: Session) -> None:
@@ -434,7 +433,7 @@ def sign_application(
             status_code=409,
             detail="Only approved applications can be issued.",
         )
-    if (application.approved_amount is None or application.approved_amount <= 0
+    if (not application.offer or application.approved_amount is None or application.approved_amount <= 0
             or application.approved_rate is None):
         raise HTTPException(status_code=409, detail="Approved loan terms are missing.")
     application.status = "ISSUED"
@@ -644,7 +643,7 @@ def employee_decision(
         if (
             application.requested_amount is None
             or decision.approved_amount is None
-            or decision.approved_amount <= 0
+            or decision.approved_amount < Decimal("100000.00")
             or decision.approved_amount > application.requested_amount
             or decision.approved_amount > Decimal("5000000.00")
         ):
@@ -660,6 +659,11 @@ def employee_decision(
                 status_code=409,
                 detail="Applications with known stop factors cannot be approved.",
             )
+        evaluation = evaluate_manual_offer(application, latest_checks, decision.approved_amount)
+        if evaluation.status != "APPROVED" or evaluation.approved_amount != decision.approved_amount:
+            raise HTTPException(status_code=422, detail="Requested approval does not satisfy the credit policy and DSCR 1.35.")
+        if decision.approved_rate is not None and decision.approved_rate != evaluation.approved_rate:
+            raise HTTPException(status_code=422, detail="The interest rate is calculated by the server.")
 
     new_status = {
         "APPROVE": "APPROVED",
@@ -671,8 +675,15 @@ def employee_decision(
     if decision.decision_reason_code is not None:
         application.decision_reason_code = decision.decision_reason_code
     if decision.action.value == "APPROVE":
-        application.approved_amount = decision.approved_amount
-        application.approved_rate = ANNUAL_INTEREST_RATE
+        application.scoring_result = {
+            **evaluation.scoring_result,
+            "automated_assessment": application.scoring_result,
+        }
+        application.score = evaluation.score
+        application.risk_grade = evaluation.risk_grade
+        application.decision_reason_code = decision.decision_reason_code or evaluation.reason_code
+        application.approved_amount = evaluation.approved_amount
+        application.approved_rate = evaluation.approved_rate
     elif decision.action.value == "REQUEST_INFO":
         application.missing_fields = list(decision.missing_fields or [])
         application.info_comment = decision.comment

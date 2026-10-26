@@ -109,7 +109,7 @@ class ApplicationCreate(BaseModel):
 
 # --- 3. Схемы действий сотрудника (ТЗ п.4) ---
 class EmployeeActionRequest(BaseModel):
-    model_config = ConfigDict(json_encoders={Decimal: str})
+    model_config = ConfigDict(extra="forbid", json_encoders={Decimal: str})
 
     action: EmployeeAction
     version: int = Field(ge=1)
@@ -117,7 +117,7 @@ class EmployeeActionRequest(BaseModel):
     
     decision_reason_code: str | None = Field(default=None, max_length=128)
     approved_amount: RubleAmount | None = Field(
-        default=None, gt=0, max_digits=18, decimal_places=2
+        default=None, ge=100000, max_digits=18, decimal_places=2
     )
     approved_rate: Decimal | None = Field(
         default=None, ge=0, max_digits=8, decimal_places=4
@@ -128,10 +128,8 @@ class EmployeeActionRequest(BaseModel):
     @model_validator(mode="after")
     def validate_action_payload(self):
         if self.action == EmployeeAction.APPROVE:
-            if self.approved_amount is None or not self.comment:
+            if self.approved_amount is None or not self.comment or not self.comment.strip():
                 raise ValueError("Для APPROVE обязательны approved_amount и comment")
-            if self.approved_rate is not None and self.approved_rate != Decimal("28"):
-                raise ValueError("Для продукта установлена ставка 28% годовых.")
                 
         elif self.action == EmployeeAction.REJECT:
             if not self.decision_reason_code or not self.comment:
