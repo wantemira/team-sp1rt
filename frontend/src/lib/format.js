@@ -1,4 +1,4 @@
-/** API money is a decimal string in rubles, not kopecks. */
+/** Суммы API — десятичные строки рублей. */
 export function normalizeMoneyInput(value) {
   if (value == null) return null
   const raw = String(value).replace(/\s/g, '').replace(',', '.')

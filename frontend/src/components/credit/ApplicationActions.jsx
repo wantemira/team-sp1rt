@@ -1,6 +1,6 @@
 import { Button } from '../ui'
 import { ACTIONS } from '../../lib/contracts'
-/** Only actions from the server are rendered. Never infer permission from status. */
+/** Доступные действия определяет сервер через next_actions. */
 export function ApplicationActions({ nextActions = [], onAction, busy = false }) {
   const actions = [...new Set(nextActions)].filter(action => ACTIONS[action])
   if (!actions.length) return null

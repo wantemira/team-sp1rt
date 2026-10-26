@@ -5,7 +5,6 @@ import LoginPage from './pages/LoginPage';
 import { AppShell } from './components/layout/AppShell';
 import { ComponentsDemo } from './demo/ComponentsDemo';
 
-// Клиентские страницы
 import ClientDashboard from './pages/client/ClientDashBoard';
 import ClientApplications from './pages/client/ClientApplications';
 import ClientApplicationNew from './pages/client/ClientApplicationNew';
@@ -13,7 +12,6 @@ import ClientApplicationDetail from './pages/client/ClientApplicationDetail';
 import ClientDocuments from './pages/client/ClientDocuments';
 import ClientProducts from './pages/client/ClientProducts';
 
-// Страницы сотрудника (создадим ниже)
 import EmployeeApplications from './pages/employee/EmployeeApplications';
 
 function ProtectedRoute({ children, allowedRole }) {
@@ -59,15 +57,14 @@ function EmployeeLayout() {
   const location = useLocation();
   const { user, logout } = useAuth();
   
-  // Определяем активный пункт меню
   let activeItem = 'queue';
   if (location.search.includes('status=REVIEW')) activeItem = 'review';
   if (location.search.includes('status=HISTORY')) activeItem = 'history';
 
   const pathMap = {
-    'queue': '/employee/applications', // Очередь
-    'review': '/employee/applications?status=REVIEW', // На рассмотрении
-    'history': '/employee/applications?status=HISTORY' // История
+    'queue': '/employee/applications',
+    'review': '/employee/applications?status=REVIEW',
+    'history': '/employee/applications?status=HISTORY'
   };
 
   return (

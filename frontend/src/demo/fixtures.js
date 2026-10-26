@@ -1,4 +1,4 @@
-// Synthetic component examples, never imported by the API adapter.
+// Синтетические примеры галереи; рабочие кабинеты их не используют.
 const history = [
   { id: 1, new_status: 'DRAFT', comment: 'Черновик сохранен', created_at: '2026-10-24T05:00:00Z' },
   { id: 2, new_status: 'CHECKING', comment: 'Заявка отправлена', created_at: '2026-10-24T05:05:00Z' },

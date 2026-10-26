@@ -13,7 +13,6 @@ export function DocumentList({ documents = [], onDownload, onDelete }) {
   if (!documents.length) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px 20px', color: '#6b7280' }}>
-        {/* Красивая SVG-иконка документа вместо квадратика */}
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: '16px', color: '#d1d5db' }}>
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
           <polyline points="14 2 14 8 20 8"></polyline>
@@ -51,7 +50,6 @@ export function DocumentList({ documents = [], onDownload, onDelete }) {
 export function DocumentUpload({ onFile, busy = false, error }) {
   const id = useId()
   
-  // Скрываем стандартный инпут и делаем красивую зону
   return (
     <div>
       <label htmlFor={id} style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: '500', color: '#374151' }}>
@@ -84,11 +82,11 @@ export function DocumentUpload({ onFile, busy = false, error }) {
         type="file" 
         accept=".pdf,.png,.jpg,.jpeg" 
         disabled={busy} 
-        style={{ display: 'none' }} // Скрываем стандартный уродливый инпут
+        style={{ display: 'none' }}
         onChange={event => {
           const file = event.target.files?.[0]
           if (file) onFile(file)
-          event.target.value = '' // Сбрасываем, чтобы можно было загрузить тот же файл снова
+          event.target.value = '' // Сброс позволяет повторно выбрать тот же файл.
         }} 
       />
       {error && <p style={{ color: '#dc2626', fontSize: '13px', marginTop: '8px' }}>{error}</p>}

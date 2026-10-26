@@ -1,5 +1,5 @@
 import { useId } from 'react'
-/** Controlled tabs. Item: { value, label, content, disabled? }. */
+/** Состоянием вкладок управляет родитель; элемент: { value, label, content, disabled? }. */
 export function Tabs({ items, value, onChange, label = 'Разделы', variant = 'line' }) {
   const id = useId()
   const enabled = items.filter(item => !item.disabled)

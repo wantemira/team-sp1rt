@@ -28,7 +28,7 @@ export class ApiError extends Error {
     this.details = payload?.details
   }
 }
-/** No implicit token storage and no requests on import. Supply getToken from auth. */
+/** Токен берётся через getToken из контекста авторизации; клиент его не хранит. */
 export function createApiClient({ baseUrl = '/api/v1', getToken = () => null, onUnauthorized = () => {} } = {}) {
   return async function request(path, { method = 'GET', body, signal, responseType = 'json' } = {}) {
     const token = getToken()

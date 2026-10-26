@@ -18,7 +18,7 @@ export function Stepper({ steps, current, onStepClick }) {
     </ol>
   )
 }
-/** Controlled values. onSubmit/onSave receive an API-shaped payload, money stays a string. */
+/** Состояние задаёт родитель; onSubmit/onSave получают данные API с суммами в строках рублей. */
 export function ApplicationForm({ values, onChange, onSubmit, onSave, busy = false, errors = {}, error }) {
   const [localErrors, setLocalErrors] = useState({})
   function change(name, value) { setLocalErrors(current => ({ ...current, [name]: undefined })); onChange({ ...values, [name]: value }) }
