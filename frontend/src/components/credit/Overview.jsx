@@ -1,6 +1,7 @@
 import { Button, Card, EmptyState, StatusBadge } from '../ui'
 import { APPLICATION_STATUSES, PRODUCT } from '../../lib/contracts'
 import { formatDate, formatMoney } from '../../lib/format'
+import { historyText } from '../../lib/decisionText'
 export function FinancingBanner({ onApply }) {
   return <section className="financing-banner"><div><h2>Финансирование для роста бизнеса</h2><p className="muted">На оборотные средства и новые возможности вашего бизнеса</p></div><Button onClick={onApply}>Подать заявку</Button></section>
 }
@@ -15,5 +16,5 @@ export function ApplicationsTable({ applications = [], onOpen, onCreate }) {
 }
 export function StatusTimeline({ history = [] }) {
   if (!history.length) return <p className="muted">История появится после первого действия.</p>
-  return <ol className="timeline">{history.map((event, index) => <li key={event.id ?? index} className={index === history.length - 1 ? 'timeline__current' : ''}><span className="timeline__point" aria-hidden="true">{index === history.length - 1 ? '●' : '✓'}</span><div><strong>{APPLICATION_STATUSES[event.new_status]?.label || event.new_status}</strong>{event.comment && <p className="muted">{event.comment}</p>}{event.created_at && <small className="muted">{formatDate(event.created_at)}</small>}</div></li>)}</ol>
+  return <ol className="timeline">{history.map((event, index) => <li key={event.id ?? index} className={index === history.length - 1 ? 'timeline__current' : ''}><span className="timeline__point" aria-hidden="true">{index === history.length - 1 ? '●' : '✓'}</span><div><strong>{APPLICATION_STATUSES[event.new_status]?.label || event.new_status}</strong>{event.comment && <p className="muted">{historyText(event.comment)}</p>}{event.created_at && <small className="muted">{formatDate(event.created_at)}</small>}</div></li>)}</ol>
 }

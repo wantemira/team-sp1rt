@@ -1,160 +1,101 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { PageHeader } from '../../components/layout/AppShell';
-import { Card, Button, StatusBadge, InlineAlert, Field } from '../../components/ui';
-import { StatusTimeline, OfferSummary } from '../../components/credit';
-import { mockBackend } from '../../api/mockBackend';
+import { useEffect, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { useAuth } from '../../context/AuthContext'
+import { PageHeader } from '../../components/layout/AppShell'
+import { Button, Card, Field, InlineAlert, LoadingState, Modal, StatusBadge } from '../../components/ui'
+import { StatusTimeline } from '../../components/credit'
+import { CreditOffer } from '../../components/credit/CreditOffer'
+import { FINANCIAL_FIELDS } from '../../lib/contracts'
+import { decisionText } from '../../lib/decisionText'
+import { normalizeMoneyInput } from '../../lib/format'
 
 export default function ClientApplicationDetail() {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  
-  const [app, setApp] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [isProcessing, setIsProcessing] = useState(false);
-  
-  // Поля для формы дозаполнения (NEEDS_INFO)
-  const [fillValues, setFillValues] = useState({ annual_revenue: '' });
+  const { id } = useParams()
+  const { api } = useAuth()
+  const navigate = useNavigate()
+  const [app, setApp] = useState(null)
+  const [error, setError] = useState('')
+  const [pollError, setPollError] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [confirm, setConfirm] = useState(false)
+  const [values, setValues] = useState({})
+  const [attempt, setAttempt] = useState(0)
+  const update = data => setApp(current => !current || data.version >= current.version ? data : current)
 
-  // Функция загрузки данных
-  const fetchApp = useCallback(async () => {
-    try {
-      const data = await mockBackend.getById(id);
-      setApp(data);
-      setError('');
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
-
-  // Первичная загрузка
   useEffect(() => {
-    fetchApp();
-  }, [fetchApp]);
-
-  // Опрос каждые 5 секунд (Пункт 8 ТЗ)
-  useEffect(() => {
-    const pollingStatuses = ['CHECKING', 'MANUAL_REVIEW', 'NEEDS_INFO'];
-    if (!app || !pollingStatuses.includes(app.status)) return;
-
-    const timer = setInterval(() => {
-      fetchApp();
-    }, 5000);
-
-    return () => clearInterval(timer);
-  }, [app, fetchApp]);
-
-  // Обработка дозаполнения (NEEDS_INFO)
-  const handleFill = async (e) => {
-    e.preventDefault();
-    setIsProcessing(true);
-    setError('');
-    try {
-      const updated = await mockBackend.fill(app.id, { financials: { annual_revenue: fillValues.annual_revenue } }, app.version);
-      setApp(updated); // Обновляем карточку результатом
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setIsProcessing(false);
+    const controller = new AbortController()
+    let timer
+    async function load() {
+      try {
+        const data = await api.applications.get(id, controller.signal)
+        if (controller.signal.aborted) return
+        setApp(current => !current || current.id !== data.id || data.version >= current.version ? data : current)
+        setPollError(''); setLoading(false)
+        if (['CHECKING', 'NEEDS_INFO', 'MANUAL_REVIEW'].includes(data.status)) timer = setTimeout(load, 5000)
+      } catch (err) {
+        if (controller.signal.aborted) return
+        setPollError(err.message); setLoading(false)
+      }
     }
-  };
+    load()
+    return () => { controller.abort(); clearTimeout(timer) }
+  }, [api, id, attempt])
 
-  // Обработка подписания (APPROVED)
-  const handleSign = async () => {
-    if (!window.confirm('Вы уверены, что хотите подписать договор с этими условиями?')) return;
-    setIsProcessing(true);
-    setError('');
+  async function perform(action) {
+    if (busy) return
+    setBusy(true); setError('')
     try {
-      const updated = await mockBackend.sign(app.id, app.version);
-      setApp(updated);
+      if (action === 'SIGN') {
+        update(await api.applications.sign(app.id, app.version))
+        setConfirm(false)
+      } else {
+        const financials = {}
+        for (const path of app.missing_fields) {
+          const value = normalizeMoneyInput(values[path])
+          if (!value) throw new Error(`Заполните поле «${FINANCIAL_FIELDS[path] || path}»`)
+          financials[path.split('.').at(-1)] = value
+        }
+        update(await api.applications.fill(app.id, { financials }, app.version))
+        setValues({})
+      }
     } catch (err) {
-      setError(err.message);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
+      if (err.status === 409) {
+        setConfirm(false)
+        const latest = await api.applications.get(id).catch(() => null)
+        if (latest) update(latest)
+        setError('Условия или статус заявки изменились. Обновили данные; проверьте их ещё раз.')
+      } else setError(err.message)
+    } finally { setBusy(false) }
+  }
 
-  if (loading) return <div style={{ padding: 20 }}>Загрузка...</div>;
-  if (!app) return <InlineAlert type="error">{error || 'Заявка не найдена'}</InlineAlert>;
-
-  return (
-    <>
-      <PageHeader 
-        title={`Заявка №${app.id}`} 
-        action={<div style={{ display: 'flex', gap: '10px' }}>
-          <Button variant="secondary" onClick={() => navigate('/client/applications')}>Назад</Button>
-          <StatusBadge status={app.status} />
-        </div>} 
-      />
-      
-      {error && <InlineAlert type="error" style={{ marginBottom: 20 }}>{error}</InlineAlert>}
-
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '20px' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <Card title="Ход рассмотрения">
-            <StatusTimeline history={app.status_history} />
-          </Card>
-
-          {/* Блок для NEEDS_INFO */}
-          {app.status === 'NEEDS_INFO' && (
-            <Card title="Требуются дополнительные данные">
-              <div style={{ marginBottom: 16, color: 'var(--text-warning, #b45309)', backgroundColor: '#fef3c7', padding: 12, borderRadius: 6 }}>
-                Комментарий сотрудника: <strong>{app.info_comment}</strong>
-              </div>
-              <form onSubmit={handleFill} className="stack" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                {app.missing_fields.includes('annual_revenue') && (
-                  <Field 
-                    label="Выручка за последние 12 месяцев" 
-                    inputMode="decimal"
-                    value={fillValues.annual_revenue}
-                    onChange={e => setFillValues({ ...fillValues, annual_revenue: e.target.value })}
-                    required
-                  />
-                )}
-                <Button type="submit" disabled={isProcessing}>
-                  {isProcessing ? 'Отправка...' : 'Отправить данные'}
-                </Button>
-              </form>
-            </Card>
-          )}
-
-          {/* Блок для ISSUED */}
-          {app.status === 'ISSUED' && (
-            <Card title="Заявка завершена">
-              <InlineAlert type="success" style={{ marginBottom: 16 }}>
-                Кредит успешно выдан! (Это имитация выдачи средств на демо-стенде).
-              </InlineAlert>
-              <p>Вы можете закрыть эту страницу или перейти к списку своих заявок.</p>
-            </Card>
-          )}
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <OfferSummary 
-            amount={app.status === 'APPROVED' || app.status === 'ISSUED' ? app.approved_amount : app.requested_amount} 
-            term={app.requested_term_months} 
-            rate={app.approved_rate}
-            approved={app.status === 'APPROVED' || app.status === 'ISSUED'} 
-          />
-          
-          {/* Кнопка подписания для APPROVED */}
-          {app.status === 'APPROVED' && (
-            <Card title="Подписание">
-              <p className="muted" style={{ marginBottom: 16 }}>Ознакомьтесь с условиями и подпишите договор.</p>
-              <Button 
-                style={{ width: '100%', backgroundColor: 'var(--color-success, #16a34a)' }} 
-                onClick={handleSign}
-                disabled={isProcessing}
-              >
-                {isProcessing ? 'Подписание...' : 'Подписать договор'}
-              </Button>
-            </Card>
-          )}
-        </div>
+  if (loading) return <LoadingState />
+  if (!app || String(app.id) !== id) return <InlineAlert tone="danger">{pollError || 'Заявка не найдена'}<Button onClick={() => setAttempt(value => value + 1)}>Повторить</Button></InlineAlert>
+  const canSign = app.next_actions.includes('SIGN') && Boolean(app.offer)
+  return <>
+    <PageHeader title={`Заявка №${app.id}`} description="Кредит на оборотные средства" action={<StatusBadge status={app.status} />} />
+    <Button variant="secondary" onClick={() => navigate('/client/applications')}>К списку заявок</Button>
+    {error && <InlineAlert tone="danger">{error}</InlineAlert>}
+    {pollError && <InlineAlert tone="warning">{pollError}<Button onClick={() => setAttempt(value => value + 1)}>Обновить</Button></InlineAlert>}
+    {app.status === 'ISSUED' ? <InlineAlert tone="success" title="Предложение принято">Подписание и выдача смоделированы. Согласованные условия сохранены.</InlineAlert> :
+      app.status !== 'DRAFT' && <InlineAlert tone={app.status === 'REJECTED' ? 'warning' : 'info'}>{decisionText(app.decision_reason_code)}</InlineAlert>}
+    <div className="form-layout">
+      <div className="stack">
+        <CreditOffer application={app} />
+        {app.next_actions.includes('EDIT') && <Card title="Черновик заявки"><Button onClick={() => navigate(`/client/applications/new?draft=${app.id}`)}>Продолжить заполнение</Button></Card>}
+        {app.next_actions.includes('FILL') && <Card title="Требуются дополнительные сведения"><p>{app.info_comment === "Provide the requested financial information." ? "Заполните указанные ниже поля." : app.info_comment}</p>
+          <form className="stack" onSubmit={event => { event.preventDefault(); perform('FILL') }}>
+            {app.missing_fields.map(path => <Field key={path} label={FINANCIAL_FIELDS[path] || path} inputMode="decimal" value={values[path] || ''} required disabled={busy} onChange={event => setValues(current => ({ ...current, [path]: event.target.value }))} />)}
+            <Button type="submit" loading={busy}>Отправить сведения</Button>
+          </form>
+        </Card>}
+        {canSign && <Button onClick={() => setConfirm(true)} disabled={busy}>Согласен с предложением</Button>}
       </div>
-    </>
-  );
+      <Card title="Ход рассмотрения"><StatusTimeline history={app.status_history} /></Card>
+    </div>
+    <Modal open={confirm && canSign} onClose={() => { if (!busy) setConfirm(false) }} title="Подтвердите условия">
+      {confirm && canSign && <CreditOffer application={app} />}
+      <Button loading={busy} onClick={() => perform('SIGN')}>Подтвердить согласие</Button>
+    </Modal>
+  </>
 }
