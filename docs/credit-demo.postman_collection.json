@@ -1,0 +1,1011 @@
+{
+  "info": {
+    "name": "team-sp1rt — проверка кредитного пути",
+    "description": "Запускать целиком сверху вниз на отдельном синтетическом стенде. Задать demo_password равным TEST_USERS_PASSWORD. Создаёт заявки; реальные ФНС/БКИ, подпись и выдача не вызываются. Версии и JWT берутся из ответов, суммы рассчитываются API.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8080/api/v1"
+    },
+    {
+      "key": "demo_password",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. ИП: черновик → counter-offer → согласие",
+      "item": [
+        {
+          "name": "Вход: demo.ip@example.com",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"demo.ip@example.com\",\n  \"password\": \"{{demo_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const result = pm.response.json();",
+                  "pm.test(\"JWT выдан\", () => { pm.expect(result.access_token).to.be.a(\"string\").and.not.empty; });",
+                  "pm.collectionVariables.set(\"client_token\", result.access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Профиль клиента",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}"
+              }
+            ],
+            "url": "{{base_url}}/auth/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Роль client\", () => { pm.expect(result.user.role).to.eql(\"client\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Условия продукта",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}"
+              }
+            ],
+            "url": "{{base_url}}/products"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Один продукт MVP\", () => { pm.expect(result).to.have.lengthOf(1); pm.expect(result[0].id).to.eql(\"term_loan\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Создать пустой черновик",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/applications",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_type\": \"term_loan\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Состояние DRAFT\", () => { pm.expect(result.status).to.eql(\"DRAFT\"); });",
+                  "pm.collectionVariables.set(\"offer_id\", result.id);",
+                  "pm.collectionVariables.set(\"offer_version\", result.version);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Сохранить параметры черновика",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/applications/{{offer_id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"version\": {{offer_version}},\n  \"requested_amount\": \"1000000.00\",\n  \"requested_term_months\": 24,\n  \"purpose\": \"Пополнение оборотных средств\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Состояние DRAFT\", () => { pm.expect(result.status).to.eql(\"DRAFT\"); });",
+                  "pm.collectionVariables.set(\"offer_id\", result.id);",
+                  "pm.collectionVariables.set(\"offer_version\", result.version);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Отправить заявку",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/applications/{{offer_id}}/submit",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"version\": {{offer_version}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Состояние APPROVED\", () => { pm.expect(result.status).to.eql(\"APPROVED\"); });",
+                  "pm.collectionVariables.set(\"offer_id\", result.id);",
+                  "pm.collectionVariables.set(\"offer_version\", result.version);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Прочитать рассчитанное предложение",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}"
+              }
+            ],
+            "url": "{{base_url}}/applications/{{offer_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Состояние APPROVED\", () => { pm.expect(result.status).to.eql(\"APPROVED\"); });",
+                  "pm.test(\"Снижена сумма, DSCR безопасен\", () => { pm.expect(result.offer.kind).to.eql(\"COUNTER_OFFER\"); pm.expect(Number(result.offer.amount)).to.be.within(100000,999999); pm.expect(Number(result.offer.dscr)).to.be.at.least(1.35); pm.expect(result.next_actions).to.include(\"SIGN\"); });",
+                  "pm.collectionVariables.set(\"offer_id\", result.id);",
+                  "pm.collectionVariables.set(\"offer_version\", result.version);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Подтвердить согласие",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/applications/{{offer_id}}/sign",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"version\": {{offer_version}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Состояние ISSUED\", () => { pm.expect(result.status).to.eql(\"ISSUED\"); });",
+                  "pm.test(\"Условия и даты сохранены\", () => { pm.expect(result.signed_at).to.be.a(\"string\"); pm.expect(result.issued_at).to.be.a(\"string\"); pm.expect(result.offer.kind).to.eql(\"COUNTER_OFFER\"); });",
+                  "pm.collectionVariables.set(\"offer_id\", result.id);",
+                  "pm.collectionVariables.set(\"offer_version\", result.version);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Прочитать выданную заявку",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}"
+              }
+            ],
+            "url": "{{base_url}}/applications/{{offer_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Состояние ISSUED\", () => { pm.expect(result.status).to.eql(\"ISSUED\"); });",
+                  "pm.collectionVariables.set(\"offer_id\", result.id);",
+                  "pm.collectionVariables.set(\"offer_version\", result.version);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Повторное согласие запрещено",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/applications/{{offer_id}}/sign",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"version\": {{offer_version}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 409\", () => pm.response.to.have.status(409));",
+                  "const result = pm.response.json();"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Клиенту недоступна очередь сотрудника",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}"
+              }
+            ],
+            "url": "{{base_url}}/employee/applications"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+                  "const result = pm.response.json();"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Сотрудник: запрос сведений → одобрение",
+      "item": [
+        {
+          "name": "Вход: demo.review@example.com",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"demo.review@example.com\",\n  \"password\": \"{{demo_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const result = pm.response.json();",
+                  "pm.test(\"JWT выдан\", () => { pm.expect(result.access_token).to.be.a(\"string\").and.not.empty; });",
+                  "pm.collectionVariables.set(\"review_token\", result.access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Создать заявку на 1 млн ₽ / 24 месяца",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{review_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/applications",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_type\": \"term_loan\",\n  \"requested_amount\": \"1000000.00\",\n  \"requested_term_months\": 24,\n  \"purpose\": \"Пополнение оборотных средств\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Состояние DRAFT\", () => { pm.expect(result.status).to.eql(\"DRAFT\"); });",
+                  "pm.collectionVariables.set(\"manual_id\", result.id);",
+                  "pm.collectionVariables.set(\"manual_version\", result.version);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Отправить заявку",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{review_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/applications/{{manual_id}}/submit",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"version\": {{manual_version}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Состояние MANUAL_REVIEW\", () => { pm.expect(result.status).to.eql(\"MANUAL_REVIEW\"); });",
+                  "pm.collectionVariables.set(\"manual_id\", result.id);",
+                  "pm.collectionVariables.set(\"manual_version\", result.version);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Вход: test.employee1@example.com",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test.employee1@example.com\",\n  \"password\": \"{{demo_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const result = pm.response.json();",
+                  "pm.test(\"JWT выдан\", () => { pm.expect(result.access_token).to.be.a(\"string\").and.not.empty; });",
+                  "pm.collectionVariables.set(\"employee_token\", result.access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Очередь ручного рассмотрения",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_token}}"
+              }
+            ],
+            "url": "{{base_url}}/employee/applications?status=MANUAL_REVIEW"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Заявка присутствует\", () => { pm.expect(result.some(item => item.id === Number(pm.collectionVariables.get(\"manual_id\")))).to.eql(true); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Карточка и финансовые основания",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_token}}"
+              }
+            ],
+            "url": "{{base_url}}/employee/applications/{{manual_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Состояние MANUAL_REVIEW\", () => { pm.expect(result.status).to.eql(\"MANUAL_REVIEW\"); });",
+                  "pm.test(\"Есть входы расчёта и действия\", () => { pm.expect(result.scoring_result.inputs.fns.annual_revenue).to.eql(\"2400000.00\"); pm.expect(result.next_actions).to.include(\"APPROVE\"); });",
+                  "pm.collectionVariables.set(\"manual_id\", result.id);",
+                  "pm.collectionVariables.set(\"manual_version\", result.version);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Запросить подтверждение выручки",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/employee/applications/{{manual_id}}/action",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"version\": {{manual_version}},\n  \"action\": \"REQUEST_INFO\",\n  \"decision_reason_code\": \"CONFIRM_REVENUE\",\n  \"missing_fields\": [\n    \"business_data.financials.annual_revenue\"\n  ],\n  \"comment\": \"Подтвердите годовую выручку для ручного рассмотрения\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Состояние NEEDS_INFO\", () => { pm.expect(result.status).to.eql(\"NEEDS_INFO\"); });",
+                  "pm.collectionVariables.set(\"manual_id\", result.id);",
+                  "pm.collectionVariables.set(\"manual_version\", result.version);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Клиент дополняет сведения",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{review_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/applications/{{manual_id}}/fill",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"version\": {{manual_version}},\n  \"business_data\": {\n    \"financials\": {\n      \"annual_revenue\": \"2400000.00\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Состояние MANUAL_REVIEW\", () => { pm.expect(result.status).to.eql(\"MANUAL_REVIEW\"); });",
+                  "pm.collectionVariables.set(\"manual_id\", result.id);",
+                  "pm.collectionVariables.set(\"manual_version\", result.version);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Одобрить безопасную сумму",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/employee/applications/{{manual_id}}/action",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"version\": {{manual_version}},\n  \"action\": \"APPROVE\",\n  \"approved_amount\": \"1000000.00\",\n  \"comment\": \"Проверены выручка, расходы, обязательства и дисциплина; платёж допустим\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Состояние APPROVED\", () => { pm.expect(result.status).to.eql(\"APPROVED\"); });",
+                  "pm.test(\"Автор и исходная оценка сохранены\", () => { pm.expect(result.scoring_result.automated_assessment).to.be.an(\"object\"); pm.expect(result.status_history.at(-1).changed_by_user_id).to.be.a(\"number\"); });",
+                  "pm.collectionVariables.set(\"manual_id\", result.id);",
+                  "pm.collectionVariables.set(\"manual_version\", result.version);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Клиент принимает ручное одобрение",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{review_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/applications/{{manual_id}}/sign",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"version\": {{manual_version}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Состояние ISSUED\", () => { pm.expect(result.status).to.eql(\"ISSUED\"); });",
+                  "pm.collectionVariables.set(\"manual_id\", result.id);",
+                  "pm.collectionVariables.set(\"manual_version\", result.version);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Ошибка ФНС → повтор сотрудником → дозаполнение",
+      "item": [
+        {
+          "name": "Вход: test.client3@example.com",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test.client3@example.com\",\n  \"password\": \"{{demo_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const result = pm.response.json();",
+                  "pm.test(\"JWT выдан\", () => { pm.expect(result.access_token).to.be.a(\"string\").and.not.empty; });",
+                  "pm.collectionVariables.set(\"info_token\", result.access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Создать заявку на 1 млн ₽ / 24 месяца",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{info_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/applications",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_type\": \"term_loan\",\n  \"requested_amount\": \"1000000.00\",\n  \"requested_term_months\": 24,\n  \"purpose\": \"Пополнение оборотных средств\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Состояние DRAFT\", () => { pm.expect(result.status).to.eql(\"DRAFT\"); });",
+                  "pm.collectionVariables.set(\"recovery_id\", result.id);",
+                  "pm.collectionVariables.set(\"recovery_version\", result.version);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Отправить заявку",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{info_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/applications/{{recovery_id}}/submit",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"version\": {{recovery_version}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Состояние MANUAL_REVIEW\", () => { pm.expect(result.status).to.eql(\"MANUAL_REVIEW\"); });",
+                  "pm.collectionVariables.set(\"recovery_id\", result.id);",
+                  "pm.collectionVariables.set(\"recovery_version\", result.version);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Доступен только повтор проверок",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_token}}"
+              }
+            ],
+            "url": "{{base_url}}/employee/applications/{{recovery_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Состояние MANUAL_REVIEW\", () => { pm.expect(result.status).to.eql(\"MANUAL_REVIEW\"); });",
+                  "pm.test(\"Нельзя обойти источник\", () => { pm.expect(result.next_actions).to.eql([\"RETRY_CHECKS\"]); });",
+                  "pm.collectionVariables.set(\"recovery_id\", result.id);",
+                  "pm.collectionVariables.set(\"recovery_version\", result.version);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Повторить проверки",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/employee/applications/{{recovery_id}}/retry-checks",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"version\": {{recovery_version}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Состояние NEEDS_INFO\", () => { pm.expect(result.status).to.eql(\"NEEDS_INFO\"); });",
+                  "pm.collectionVariables.set(\"recovery_id\", result.id);",
+                  "pm.collectionVariables.set(\"recovery_version\", result.version);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Передать недостающую выручку",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{info_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/applications/{{recovery_id}}/fill",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"version\": {{recovery_version}},\n  \"business_data\": {\n    \"financials\": {\n      \"annual_revenue\": \"6000000.00\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Состояние APPROVED\", () => { pm.expect(result.status).to.eql(\"APPROVED\"); });",
+                  "pm.collectionVariables.set(\"recovery_id\", result.id);",
+                  "pm.collectionVariables.set(\"recovery_version\", result.version);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
