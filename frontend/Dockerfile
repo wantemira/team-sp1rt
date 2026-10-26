@@ -1,6 +1,6 @@
 # --- ЭТАП 1: СБОРКА ---
 # Берем официальный образ Node.js (версия 20 на легком Alpine Linux)
-FROM node:20-alpine AS build
+FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS build
 
 # Создаем рабочую папку внутри контейнера
 WORKDIR /app
@@ -20,7 +20,7 @@ RUN npm run build
 
 # --- ЭТАП 2: ЗАПУСК ---
 # Берем официальный образ Nginx
-FROM nginx:alpine
+FROM nginx:alpine@sha256:a3554c0d0b48177b1413c26e01f695334428020d9df01243fbae3e11cfd17417
 
 # Копируем наш конфиг Nginx (из Шага 2) в контейнер
 COPY nginx.conf /etc/nginx/conf.d/default.conf
