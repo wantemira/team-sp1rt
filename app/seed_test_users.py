@@ -11,15 +11,15 @@ from app.models import Client, Employee, User
 logger = logging.getLogger(__name__)
 
 CLIENT_ACCOUNTS = (
-    ("test.client1@example.com", "7700000001", "Test Client 1"),
-    ("test.client2@example.com", "7700000002", "Test Client 2"),
-    ("test.client3@example.com", "7700000003", "Test Client 3"),
+    ("test.client1@example.com", "7700000001", "Тестовая компания 1"),
+    ("test.client2@example.com", "7700000002", "Тестовая компания 2"),
+    ("test.client3@example.com", "7700000003", "Тестовая компания 3"),
     ("demo.ip@example.com", "770000000001", "ИП Алексей Демонстрационный"),
     ("demo.review@example.com", "770000000002", "ИП Мария Ручное рассмотрение"),
 )
 EMPLOYEE_ACCOUNTS = (
-    ("test.employee1@example.com", "Test Employee 1"),
-    ("test.employee2@example.com", "Test Employee 2"),
+    ("test.employee1@example.com", "Сотрудник банка 1"),
+    ("test.employee2@example.com", "Сотрудник банка 2"),
 )
 
 
@@ -41,15 +41,22 @@ def seed_test_users(db: Session, password: str) -> tuple[int, int]:
                 client_type="INDIVIDUAL" if len(inn) == 12 else "LEGAL_ENTITY",
             )
             clients_created += 1
+        elif user.client_profile.company_name in {f"Test Client {i}" for i in (1, 2, 3)}:
+            user.client_profile.company_name = company_name
 
     for email, full_name in EMPLOYEE_ACCOUNTS:
         user = _get_or_create_user(db, email, "employee", password_hash)
         if user.employee_profile is None:
             user.employee_profile = Employee(
                 full_name=full_name,
-                position="Test Loan Officer",
+                position="Кредитный специалист",
             )
             employees_created += 1
+        else:
+            if user.employee_profile.full_name in {"Test Employee 1", "Test Employee 2"}:
+                user.employee_profile.full_name = full_name
+            if user.employee_profile.position == "Test Loan Officer":
+                user.employee_profile.position = "Кредитный специалист"
 
     db.flush()
     return clients_created, employees_created

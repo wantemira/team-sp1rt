@@ -50,7 +50,7 @@ def _commit(db: Session) -> None:
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Application was changed by another request. Reload it and retry.",
+            detail='Заявка изменена другим действием. Обновите её перед повторной отправкой.',
         ) from exc
     except SQLAlchemyError:
         db.rollback()
@@ -62,7 +62,7 @@ def _check_version(application: Application, expected_version: int) -> None:
     if application.version != expected_version:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Application version is stale. Reload it and retry.",
+            detail='Данные заявки устарели. Обновите её перед повторной отправкой.',
         )
 
 
@@ -92,16 +92,16 @@ def _merge_dict(target: dict[str, Any], update: dict[str, Any]) -> dict[str, Any
 
 def _client_or_forbidden(user: User) -> Client:
     if user.role != "client":
-        raise HTTPException(status_code=403, detail="Client role required.")
+        raise HTTPException(status_code=403, detail='Это действие доступно только клиенту.')
     if user.client_profile is None:
         raise HTTPException(
-            status_code=500, detail="Client account has no linked client profile."
+            status_code=500, detail='У учётной записи отсутствует профиль клиента. Обратитесь к администратору.'
         )
     return user.client_profile
 
 
 def _not_found() -> HTTPException:
-    return HTTPException(status_code=404, detail="Application not found.")
+    return HTTPException(status_code=404, detail='Заявка не найдена или недоступна.')
 
 
 def _get_client_application(db: Session, user: User, application_id: int) -> Application:
@@ -158,7 +158,7 @@ def create_application(
             new_status="DRAFT",
             changed_by="CLIENT",
             changed_by_user_id=user.id,
-            comment="Draft created.",
+            comment='Черновик сохранён.',
         )
     )
     _commit(db)
@@ -188,7 +188,7 @@ def patch_application(
     if application.status != "DRAFT":
         raise HTTPException(
             status_code=409,
-            detail="Only draft applications can be edited.",
+            detail='Редактировать можно только черновик заявки.',
         )
     _check_version(application, data.version)
 
@@ -217,7 +217,7 @@ def submit_application(
     if application.status != "DRAFT":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Only draft applications can be submitted.",
+            detail='Отправить на рассмотрение можно только черновик.',
         )
     if (
         application.requested_amount is None
@@ -237,7 +237,7 @@ def submit_application(
         application,
         changed_by="CLIENT",
         changed_by_user_id=user.id,
-        transition_comment="Application submitted for review.",
+        transition_comment='Заявка отправлена на рассмотрение.',
     )
 
 
@@ -249,7 +249,7 @@ def fill_application(
     if application.status != "NEEDS_INFO":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Only applications that need information can be filled.",
+            detail='Сведения можно дополнить только по запросу в карточке заявки.',
         )
     requested_fields = set(application.missing_fields or [])
     provided_fields = data.business_data.financials.model_fields_set
@@ -285,7 +285,7 @@ def fill_application(
         application,
         changed_by="CLIENT",
         changed_by_user_id=user.id,
-        transition_comment="Client provided requested financial information.",
+        transition_comment='Дополнительные сведения получены.',
     )
 
 
@@ -293,7 +293,7 @@ def retry_checks(
     db: Session, employee: User, application_id: int, expected_version: int
 ) -> Application:
     if employee.role != "employee":
-        raise HTTPException(status_code=403, detail="Employee role required.")
+        raise HTTPException(status_code=403, detail='Это действие доступно только сотруднику.')
     application = application_repository.get_employee_application(db, application_id)
     if application is None:
         raise _not_found()
@@ -301,7 +301,7 @@ def retry_checks(
     if application.status != "MANUAL_REVIEW":
         raise HTTPException(
             status_code=409,
-            detail="Checks can only be retried for applications in MANUAL_REVIEW.",
+            detail='Повтор проверки доступен только для заявки на рассмотрении сотрудника.',
         )
     latest_checks = _latest_checks(application)
     if _required_checks_succeeded(latest_checks):
@@ -314,7 +314,7 @@ def retry_checks(
         application,
         changed_by="EMPLOYEE",
         changed_by_user_id=employee.id,
-        transition_comment="Employee retried unavailable external checks.",
+        transition_comment='Сотрудник повторил внешние проверки.',
     )
 
 
@@ -393,7 +393,7 @@ def _run_credit_checks(
         application.risk_grade = evaluation.risk_grade
         if evaluation.status == "NEEDS_INFO":
             application.missing_fields = list(evaluation.missing_fields)
-            application.info_comment = "Provide the requested financial information."
+            application.info_comment = 'Заполните запрошенные финансовые показатели.'
         else:
             application.missing_fields = []
             application.info_comment = None
@@ -447,7 +447,7 @@ def sign_application(
     if application.status != "APPROVED":
         raise HTTPException(
             status_code=409,
-            detail="Only approved applications can be issued.",
+            detail='Принять условия можно только по одобренной заявке.',
         )
     try:
         offer = CreditOffer.model_validate(application.offer)
@@ -478,7 +478,7 @@ def sign_application(
             new_status="ISSUED",
             changed_by="CLIENT",
             changed_by_user_id=user.id,
-            comment="Demo credit agreement signed and funds issued.",
+            comment='Согласие с условиями принято; выдача смоделирована.',
         )
     )
     _commit(db)
@@ -496,18 +496,18 @@ def upload_document(
     application = _get_client_application(db, user, application_id)
     if application.status == "REJECTED":
         raise HTTPException(
-            status_code=409, detail="Rejected applications cannot receive documents."
+            status_code=409, detail='Нельзя добавить документ к отклонённой заявке.'
         )
 
     file_path: Path | None = None
     try:
         contents = upload.file.read(settings.max_upload_size_bytes + 1)
         if not contents:
-            raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+            raise HTTPException(status_code=400, detail='Выбранный файл пуст. Загрузите документ с содержимым.')
         if len(contents) > settings.max_upload_size_bytes:
             raise HTTPException(
                 status_code=413,
-                detail="Uploaded file exceeds the configured size limit.",
+                detail='Файл превышает допустимый размер.',
             )
 
         settings.upload_dir.mkdir(parents=True, exist_ok=True)
@@ -539,7 +539,7 @@ def upload_document(
             file_path.unlink(missing_ok=True)
         logger.exception("Could not store uploaded application document.")
         raise HTTPException(
-            status_code=500, detail="Could not store the uploaded document."
+            status_code=500, detail='Не удалось сохранить документ. Повторите загрузку.'
         ) from exc
     except SQLAlchemyError:
         if file_path is not None:
@@ -564,11 +564,11 @@ def get_document_file(
         if application is None:
             raise _not_found()
     elif user.role != "employee":
-        raise HTTPException(status_code=403, detail="Client or employee role required.")
+        raise HTTPException(status_code=403, detail='Для доступа войдите как клиент или сотрудник.')
 
     file_path = settings.upload_dir / f"{document.id}.upload"
     if not file_path.is_file():
-        raise HTTPException(status_code=404, detail="Stored document file not found.")
+        raise HTTPException(status_code=404, detail='Файл документа не найден на сервере.')
     return document, file_path
 
 
@@ -640,7 +640,7 @@ def employee_decision(
     decision: EmployeeActionRequest,
 ) -> Application:
     if employee.role != "employee":
-        raise HTTPException(status_code=403, detail="Employee role required.")
+        raise HTTPException(status_code=403, detail='Это действие доступно только сотруднику.')
     application = application_repository.get_employee_application(db, application_id)
     if application is None:
         raise _not_found()
@@ -648,7 +648,7 @@ def employee_decision(
     if application.status != "MANUAL_REVIEW":
         raise HTTPException(
             status_code=409,
-            detail="Employee decisions are only available in MANUAL_REVIEW.",
+            detail='Решение сотрудника доступно только для заявки на ручном рассмотрении.',
         )
     latest_checks = _latest_checks(application)
     if (
@@ -657,8 +657,7 @@ def employee_decision(
         raise HTTPException(
             status_code=409,
             detail=(
-                "Employee decisions require all mandatory checks to succeed; "
-                "retry technical failures."
+                'Перед решением нужно получить пригодные данные всех обязательных проверок. Повторите запрос к источнику.'
             ),
         )
     if (
@@ -667,7 +666,7 @@ def employee_decision(
     ):
         raise HTTPException(
             status_code=400,
-            detail="decision_reason_code is required for REJECT and REQUEST_INFO.",
+            detail='Для отказа или запроса сведений укажите причину решения.',
         )
     if decision.action.value == "APPROVE":
         if (
@@ -680,20 +679,19 @@ def employee_decision(
             raise HTTPException(
                 status_code=422,
                 detail=(
-                    "approved_amount must be positive and no greater than the "
-                    "requested amount or product limit."
+                    'Одобренная сумма должна быть в пределах продукта и не превышать запрошенную.'
                 ),
             )
         if _has_known_stop_factor(latest_checks):
             raise HTTPException(
                 status_code=409,
-                detail="Applications with known stop factors cannot be approved.",
+                detail='Нельзя одобрить заявку с выявленными стоп-факторами.',
             )
         evaluation = evaluate_manual_offer(application, latest_checks, decision.approved_amount)
         if evaluation.status != "APPROVED" or evaluation.approved_amount != decision.approved_amount:
-            raise HTTPException(status_code=422, detail="Requested approval does not satisfy the credit policy and DSCR 1.35.")
+            raise HTTPException(status_code=422, detail='Сумма превышает безопасную нагрузку. Уменьшите её: на рубль кредитных платежей требуется не менее 1,35 рубля денежного потока.')
         if decision.approved_rate is not None and decision.approved_rate != evaluation.approved_rate:
-            raise HTTPException(status_code=422, detail="The interest rate is calculated by the server.")
+            raise HTTPException(status_code=422, detail='Ставку рассчитывает система. Обновите условия предложения.')
 
     new_status = {
         "APPROVE": "APPROVED",

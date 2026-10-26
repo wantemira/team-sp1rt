@@ -20,7 +20,7 @@ def get_current_user(
     if credentials is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Bearer token is required.",
+            detail='Войдите в кабинет для выполнения действия.',
             headers={"WWW-Authenticate": "Bearer"},
         )
     try:
@@ -34,7 +34,7 @@ def get_current_user(
     except (jwt.InvalidTokenError, TypeError, ValueError, KeyError) as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired access token.",
+            detail='Сессия завершена. Войдите в кабинет снова.',
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
 
@@ -42,7 +42,7 @@ def get_current_user(
     if user is None or user.role != payload["role"]:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired access token.",
+            detail='Сессия завершена. Войдите в кабинет снова.',
             headers={"WWW-Authenticate": "Bearer"},
         )
     return user
@@ -53,7 +53,7 @@ def require_role(role: str) -> Callable:
         if user.role != role:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"{role.capitalize()} role required.",
+                detail="Это действие доступно только сотруднику." if role == "employee" else "Это действие доступно только клиенту.",
             )
         return user
 

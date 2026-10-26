@@ -18,17 +18,17 @@ def _profile_response(user: User) -> AuthenticatedUserResponse:
     if user.role == "client" and user.client_profile is None:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Client account has no linked client profile.",
+            detail='У учётной записи отсутствует профиль клиента. Обратитесь к администратору.',
         )
     if user.role == "employee" and user.employee_profile is None:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Employee account has no linked employee profile.",
+            detail='У учётной записи отсутствует профиль сотрудника. Обратитесь к администратору.',
         )
     if user.role not in {"client", "employee"}:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account role is not allowed to access this service.",
+            detail='Роль учётной записи не позволяет войти в кабинет.',
         )
 
     return AuthenticatedUserResponse(
@@ -51,7 +51,7 @@ def login(db: Session, email: str, password: str) -> LoginResponse:
     if user is None or not verify_password(password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password.",
+            detail='Неверная электронная почта или пароль.',
             headers={"WWW-Authenticate": "Bearer"},
         )
 

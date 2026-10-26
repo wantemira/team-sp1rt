@@ -17,7 +17,7 @@ from app.core.credit_policy import LoanTerm, MAX_AMOUNT, MIN_AMOUNT, TARGET_DSCR
 
 def _require_ruble_string(value: object) -> object:
     if value is not None and not isinstance(value, str):
-        raise ValueError("Monetary values must be provided as strings in rubles.")
+        raise ValueError('Укажите сумму в рублях строкой с точностью до копейки.')
     return value
 
 
@@ -135,20 +135,20 @@ class EmployeeActionRequest(BaseModel):
         if not self.comment:
             raise ValueError("Добавьте непустой комментарий к решению")
         if self.action != EmployeeAction.APPROVE and (self.approved_amount is not None or self.approved_rate is not None):
-            raise ValueError("Условия кредита допустимы только для APPROVE")
+            raise ValueError('Условия кредита можно указать только при одобрении.')
         if self.action != EmployeeAction.REQUEST_INFO and self.missing_fields is not None:
-            raise ValueError("missing_fields допустим только для REQUEST_INFO")
+            raise ValueError('Список запрошенных полей допустим только при запросе сведений.')
         if self.action == EmployeeAction.APPROVE:
             if self.approved_amount is None or not self.comment or not self.comment.strip():
-                raise ValueError("Для APPROVE обязательны approved_amount и comment")
+                raise ValueError('Для одобрения укажите сумму и комментарий.')
                 
         elif self.action == EmployeeAction.REJECT:
             if not self.decision_reason_code or not self.comment:
-                raise ValueError("Для REJECT обязательны decision_reason_code, comment")
+                raise ValueError('Для отказа укажите причину и комментарий.')
                 
         elif self.action == EmployeeAction.REQUEST_INFO:
             if not self.missing_fields or not self.decision_reason_code:
-                raise ValueError("Для REQUEST_INFO обязательны missing_fields и decision_reason_code")
+                raise ValueError('Для запроса сведений выберите поля и укажите причину.')
             
             allowed_fields = {
                 "business_data.financials.annual_revenue",
@@ -158,7 +158,7 @@ class EmployeeActionRequest(BaseModel):
                 len(self.missing_fields) != len(set(self.missing_fields))
                 or not set(self.missing_fields).issubset(allowed_fields)
             ):
-                raise ValueError(f"missing_fields может содержать только: {allowed_fields}")
+                raise ValueError("Можно запросить только годовую выручку и операционные расходы.")
                 
         return self
 
@@ -270,7 +270,7 @@ class ApplicationPatch(BaseModel):
     @model_validator(mode="after")
     def require_application_changes(self) -> "ApplicationPatch":
         if not self.model_fields_set.difference({"version"}):
-            raise ValueError("At least one application field must be provided.")
+            raise ValueError('Укажите хотя бы одно изменение параметров заявки.')
         return self
 
 
@@ -283,5 +283,5 @@ class ApplicationFill(BaseModel):
     @model_validator(mode="after")
     def require_financial_information(self) -> "ApplicationFill":
         if not self.business_data.financials.model_fields_set:
-            raise ValueError("At least one financial field must be provided.")
+            raise ValueError('Укажите хотя бы один финансовый показатель.')
         return self

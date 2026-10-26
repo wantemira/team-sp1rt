@@ -10,8 +10,8 @@ def requested_version(
     """JSON — основной контракт; query сохранён на время перехода кабинетов."""
     if request is not None:
         if version is not None and version != request.version:
-            raise HTTPException(status_code=422, detail="Conflicting application versions.")
+            raise HTTPException(status_code=422, detail='Переданы разные версии заявки. Обновите её и повторите действие.')
         return request.version
     if version is None:
-        raise HTTPException(status_code=422, detail="Send JSON with the current application version.")
+        raise HTTPException(status_code=422, detail='Передайте актуальную версию заявки.')
     return version

@@ -191,7 +191,7 @@ def test_client_can_create_draft_list_and_read_only_own_applications(
             "new_status": "DRAFT",
             "changed_by": "CLIENT",
             "changed_by_user_id": data["status_history"][0]["changed_by_user_id"],
-            "comment": "Draft created.",
+            "comment": "Черновик сохранён.",
             "created_at": data["status_history"][0]["created_at"],
         }
     ]

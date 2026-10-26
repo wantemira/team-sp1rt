@@ -1,4 +1,5 @@
 import logging
+import re
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -6,6 +7,36 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 logger = logging.getLogger(__name__)
+
+
+def _public_message(message: str, fallback: str = "Не удалось выполнить запрос.") -> str:
+    return message if re.search("[А-Яа-яЁё]", message) else fallback
+
+
+def _field_message(error: dict) -> str:
+    kind = error["type"]
+    messages = {
+        "missing": "Заполните поле.",
+        "extra_forbidden": "Поле не предусмотрено для этого действия.",
+        "json_invalid": "Не удалось прочитать данные формы. Обновите страницу и повторите отправку.",
+        "int_type": "Укажите целое число.", "int_parsing": "Укажите целое число.",
+        "string_type": "Укажите текстовое значение.", "string_too_short": "Значение слишком короткое.",
+        "string_too_long": "Значение слишком длинное.",
+        "greater_than_equal": "Значение меньше допустимого минимума.",
+        "less_than_equal": "Значение больше допустимого максимума.",
+        "greater_than": "Значение должно быть больше допустимой границы.",
+        "literal_error": "Выберите значение из доступного списка.",
+        "enum": "Выберите значение из доступного списка.",
+        "decimal_parsing": "Укажите сумму в рублях.",
+        "decimal_max_places": "Укажите сумму с точностью до копейки.",
+        "decimal_max_digits": "Сумма превышает допустимую точность.",
+        "decimal_whole_digits": "Сумма слишком велика.",
+        "finite_number": "Укажите конечное числовое значение.",
+        "bool_type": "Выберите допустимое значение.",
+    }
+    if kind == "value_error":
+        return _public_message(str((error.get("ctx") or {}).get("error", "")), "Проверьте значение поля.")
+    return messages.get(kind, "Проверьте значение поля.")
 
 
 def _error_code(status_code: int) -> str:
@@ -36,7 +67,7 @@ async def http_exception_handler(
 
     return JSONResponse(
         status_code=exc.status_code,
-        content={"error_code": code, "message": message, "details": details},
+        content={"error_code": code, "message": _public_message(message), "details": details},
         headers=exc.headers,
     )
 
@@ -45,7 +76,7 @@ async def validation_exception_handler(
     _request: Request, exc: RequestValidationError
 ) -> JSONResponse:
     field_errors = [
-        {"field": ".".join(str(part) for part in error["loc"]), "message": error["msg"]}
+        {"field": ".".join(str(part) for part in error["loc"]), "message": _field_message(error)}
         for error in exc.errors()
     ]
     return JSONResponse(
