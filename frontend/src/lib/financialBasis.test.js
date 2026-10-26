@@ -15,7 +15,7 @@ test('manual review uses saved source inputs and keeps zero debt distinct from m
   const result = financialBasis(snapshot())
   assert.equal(result.revenue.amount, '2400000.00')
   assert.equal(result.revenue.source, 'ФНС')
-  assert.equal(result.monthlyCashFlow, '100 000 ₽')
+  assert.equal(result.monthlyCashFlow, '100\u00a0000 ₽')
   assert.equal(result.debtPayments, '0.00')
   assert.equal(result.activeLoans, 0)
   assert.equal(result.overdueDays, 0)
@@ -62,7 +62,7 @@ test('monthly flow preserves large ruble values, cents, a loss and a true zero',
   assert.equal(financialBasis(application).monthlyCashFlow, '0,01 ₽')
   fns.annual_revenue = '0.00'
   fns.annual_operating_expenses = '1200000.00'
-  assert.equal(financialBasis(application).monthlyCashFlow, '−100 000 ₽')
+  assert.equal(financialBasis(application).monthlyCashFlow, '−100\u00a0000 ₽')
   fns.annual_operating_expenses = '0.00'
   assert.equal(financialBasis(application).monthlyCashFlow, '0 ₽')
 })
