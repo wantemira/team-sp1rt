@@ -225,7 +225,7 @@ def submit_application(
         or application.requested_term_months not in TERMS
     ):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=422,
             detail=(
                 f"Укажите сумму от {MIN_AMOUNT} до {MAX_AMOUNT} рублей "
                 f"и срок из доступных: {', '.join(map(str, TERMS))} мес."
@@ -265,10 +265,15 @@ def fill_application(
     ]
     if not requested_fields or missing_or_invalid:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=422,
             detail={
-                "message": "Fill every requested financial field with a valid value.",
-                "missing_fields": missing_or_invalid or sorted(requested_fields),
+                "error_code": "MISSING_FINANCIAL_FIELDS",
+                "message": "Заполните все запрошенные финансовые сведения.",
+                "details": {
+                    "missing_fields": missing_or_invalid or sorted(requested_fields),
+                    "fields": [{"field": path, "message": "Заполните запрошенное поле"}
+                               for path in missing_or_invalid or sorted(requested_fields)],
+                },
             },
         )
     changes = _serialize_business_data(data.business_data, exclude_unset=True)

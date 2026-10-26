@@ -103,7 +103,7 @@ class BusinessData(BaseModel):
 
 # --- 2. Клиентские схемы (ТЗ п.2) ---
 class ApplicationCreate(BaseModel):
-    model_config = ConfigDict(extra="forbid", json_encoders={Decimal: str})
+    model_config = ConfigDict(extra="forbid")
 
     product_type: Literal["term_loan"]
     requested_amount: RubleAmount | None = Field(
@@ -116,7 +116,7 @@ class ApplicationCreate(BaseModel):
 
 # --- 3. Схемы действий сотрудника (ТЗ п.4) ---
 class EmployeeActionRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid", json_encoders={Decimal: str})
+    model_config = ConfigDict(extra="forbid")
 
     action: EmployeeAction
     version: Version
@@ -202,7 +202,7 @@ class ApplicationCheckResponse(BaseModel):
 
 
 class ApplicationResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True, json_encoders={Decimal: str})
+    model_config = ConfigDict(from_attributes=True)
 
     id: int
     product_type: str
@@ -248,7 +248,7 @@ class EmployeeClientSummary(BaseModel):
 
 
 class EmployeeApplicationShort(BaseModel):
-    model_config = ConfigDict(from_attributes=True, json_encoders={Decimal: str})
+    model_config = ConfigDict(from_attributes=True)
 
     id: int
     company_name: str
@@ -264,7 +264,7 @@ class EmployeeApplicationDetail(ApplicationResponse):
 
 
 class ApplicationPatch(BaseModel):
-    model_config = ConfigDict(extra="forbid", json_encoders={Decimal: str})
+    model_config = ConfigDict(extra="forbid")
 
     version: Version
     requested_amount: RubleAmount | None = Field(
@@ -282,7 +282,7 @@ class ApplicationPatch(BaseModel):
 
 
 class ApplicationFill(BaseModel):
-    model_config = ConfigDict(extra="forbid", json_encoders={Decimal: str})
+    model_config = ConfigDict(extra="forbid")
 
     version: Version
     business_data: BusinessData

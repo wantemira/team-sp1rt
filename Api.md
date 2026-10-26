@@ -167,7 +167,7 @@
 
 - `id` (integer, идентификатор `applications.id`; path) — обязательно
 
-**Успешный ответ — 200:** `ApplicationStatusResponse` (поля перечислены выше).
+**Успешный ответ — 200:** `ApplicationResponse` (поля перечислены выше).
 
 **Ошибка:**
 
@@ -419,7 +419,7 @@
 
 Статус, комментарий и ID сотрудника (`changed_by_user_id`) фиксируются в `application_status_history`; `changed_by` определяется сервером по роли пользователя. При `REQUEST_INFO` значения `missing_fields` и `info_comment` сохраняются в карточке заявки.
 
-**Успешный ответ — 200:** `ApplicationStatusResponse` (поля перечислены выше).
+**Успешный ответ — 200:** `ApplicationResponse` (поля перечислены выше).
 
 **Ошибка:**
 
@@ -450,10 +450,13 @@
 и `POST /employee/applications/{id}/retry-checks`: JSON `{"version": 2}`.
 Query-параметр временно сохранён для старых клиентов. Если версии отсутствуют
 или JSON и query противоречат друг другу — 422; устаревшая версия — 409.
+JSON-версия должна быть положительным целым числом: строки, дробные числа
+и boolean отклоняются. Неизвестные поля business_data и financials не игнорируются.
+Условия одобрения допустимы только в APPROVE, missing_fields — только в REQUEST_INFO.
 Дозаполнение: `POST /applications/{id}/fill` с business_data и version;
 PATCH сохранён как совместимый маршрут.
 
-`ApplicationStatusResponse.offer` — типизированное предложение или null.
+`ApplicationResponse.offer` — типизированное предложение или null.
 В APPROVED/ISSUED содержит kind (ORIGINAL/COUNTER_OFFER), amount,
 annual_rate_pct, term_months, monthly_payment, dscr, requested_dscr,
 target_dscr, monthly_cash_flow, existing_debt_payments,
@@ -465,3 +468,16 @@ max_total_debt_service и explanation. Деньги и числовые пока
 Виртуальные UI-фильтры QUEUE/REVIEW/HISTORY не передаются серверу: клиент
 запрашивает нужные статусы и объединяет ответы по id. Сервер определяет
 доступные действия через next_actions.
+
+Перед согласием проверяется согласованность сохранённых суммы, ставки, срока,
+вида предложения и DSCR. Ошибка 409 `OFFER_INCONSISTENT` не меняет статус и
+историю; она требует проверки условий сотрудником. Скоринг при согласии
+не запускается повторно.
+
+Ошибки используют JSON `{error_code, message, details}`. При нехватке
+запрошенных финансовых сведений код `MISSING_FINANCIAL_FIELDS` сопровождается
+`details.missing_fields` и `details.fields` (field/message). Необработанная
+ошибка возвращает 500 `INTERNAL_ERROR` без внутренних сведений; подробности
+остаются в серверном журнале. Ответы 422/500 в `/openapi.json` описывают этот
+конверт, а не стандартный HTTPValidationError FastAPI. Живой `/openapi.json`
+— источник точных схем работающего сервера; `api.yaml` — обзорный контракт.

@@ -1,7 +1,10 @@
 # team-sp1rt
 
 Backend API for the Alfa Smart Credit client cabinet and employee review flow.
-The React frontend is in `frontend/`; API contracts and data design are in
+Before integration, the React frontend lives on the existing `frontend-manager`
+branch; run it from that checkout with `CREDIT_API_TARGET` pointing to this API.
+The frontend will be in `frontend/` after integration. This branch's Compose
+starts the database and API. API contracts and data design are in
 [`Api.md`](./Api.md), [`api.yaml`](./api.yaml), and [`DB.md`](./DB.md).
 
 ## Backend architecture

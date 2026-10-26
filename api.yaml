@@ -636,7 +636,7 @@ paths:
       summary: Действие сотрудника по заявке
       description: >-
         Доступно только сотрудникам при рассмотрении кредитного риска после
-        успешного завершения обязательных проверок. Для технического сбоя
+        успешного завершения обязательных проверок. Для сбоя или некорректных данных
         доступен только retry-checks. При APPROVE действуют стоп-факторы,
         сумма ограничена запрошенной, лимитами продукта и DSCR 1.35; ставка
         рассчитывается сервером по сохранённым проверкам. ID сотрудника и комментарий сохраняются в истории.
@@ -703,8 +703,9 @@ paths:
       tags: [Employee]
       summary: Повтор технически неуспешных проверок
       description: >-
-        Доступно в MANUAL_REVIEW для причины EXTERNAL_CHECK_UNAVAILABLE, если
-        последняя попытка содержит TIMEOUT/ERROR. Новые проверки, результат,
+        Доступно в MANUAL_REVIEW, если последние ответы источников недоступны,
+        неполны или некорректны (EXTERNAL_CHECK_UNAVAILABLE,
+        EXTERNAL_DATA_INCOMPLETE, INVALID_SOURCE_DATA). Новые проверки, результат,
         статус и история сохраняются одной транзакцией. Повторный сбой оставляет
         техническую причину и не превращается в кредитный отказ.
       security:
@@ -984,12 +985,14 @@ components:
           example: "Пополнение оборотных средств"
         business_data:
           type: object
+          additionalProperties: false
           description: 'Финансовые данные. Если их не передать, сервер сохранит {"financials": {}}.'
           default:
             financials: {}
           properties:
             financials:
               type: object
+              additionalProperties: false
               properties:
                 annual_revenue:
                   type: string
@@ -1027,9 +1030,11 @@ components:
           maxLength: 500
         business_data:
           type: object
+          additionalProperties: false
           properties:
             financials:
               type: object
+              additionalProperties: false
               properties:
                 annual_revenue:
                   type: string
@@ -1048,10 +1053,12 @@ components:
           minimum: 1
         business_data:
           type: object
+          additionalProperties: false
           required: [financials]
           properties:
             financials:
               type: object
+              additionalProperties: false
               minProperties: 1
               properties:
                 annual_revenue:
@@ -1080,7 +1087,9 @@ components:
 
     EmployeeActionRequest:
       type: object
-      required: [action, version]
+      additionalProperties: false
+      required: [action, version, comment]
+      description: Условия кредита допустимы только для APPROVE, missing_fields только для REQUEST_INFO. Для REJECT и REQUEST_INFO обязателен непустой decision_reason_code.
       properties:
         action:
           type: string
@@ -1116,6 +1125,9 @@ components:
           example: "20.1200"
         comment:
           type: string
+          minLength: 1
+          maxLength: 4000
+          description: Обязателен для каждого решения; пробелы по краям удаляются.
           example: "Снизили лимит из-за долговой нагрузки"
 
     ApplicationStatusResponse:
@@ -1165,7 +1177,7 @@ components:
             Действия, вычисленные для роли текущего пользователя и состояния:
             клиент DRAFT=[EDIT,SUBMIT], NEEDS_INFO=[FILL], APPROVED=[SIGN];
             сотрудник MANUAL_REVIEW при кредитном рассмотрении=
-            [APPROVE,REJECT,REQUEST_INFO], при EXTERNAL_CHECK_UNAVAILABLE=
+            [APPROVE,REJECT,REQUEST_INFO], при непригодных данных источников=
             [RETRY_CHECKS]; остальные сочетания возвращают пустой список.
           items:
             type: string
