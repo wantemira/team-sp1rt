@@ -59,9 +59,9 @@ and history in one database transaction. No worker or message broker is used.
    The API container runs `alembic upgrade head` before starting Uvicorn.
    The API is available at `http://localhost:8000`; Swagger UI is at
    `http://localhost:8000/docs`.
-3. Docker Compose creates six local test accounts at startup:
+3. Docker Compose creates seven local test accounts at startup:
    `test.client1@example.com`, `test.client2@example.com`,
-   `test.client3@example.com`, `demo.ip@example.com`, `test.employee1@example.com`, and
+   `test.client3@example.com`, `demo.ip@example.com`, `demo.review@example.com`, `test.employee1@example.com`, and
    `test.employee2@example.com`. The shared password is the value of
    `TEST_USERS_PASSWORD` in `.env` (the example file supplies a local-only
    password). There is intentionally no public registration route.
@@ -111,3 +111,11 @@ Sign in as `demo.ip@example.com` with `TEST_USERS_PASSWORD`. Request
 produce an affordable counter-offer around 610,000 rubles, with the payment,
 DSCR, rate and explanation saved in `scoring_result.offer`. See
 [CREDIT_POLICY.md](./CREDIT_POLICY.md) for the demonstration rules.
+
+For manual review, sign in as `demo.review@example.com` and request
+`1000000.00` rubles for 24 months. The real demonstration calculation returns
+a borderline score: current debt is absent, but prior delays and the industry
+reduce the score. Sign in as `test.employee1@example.com` to approve, reject,
+or request information. No scoring result is forced for this profile.
+Run the idempotent seed again to add the account to an existing local database;
+passwords of existing accounts are preserved.

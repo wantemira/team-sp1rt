@@ -6,6 +6,7 @@ from typing import Literal
 CheckStatus = Literal["SUCCESS", "TIMEOUT", "ERROR"]
 CLIENT_3_INN = "7700000003"
 DEMO_IP_INN = "770000000001"
+DEMO_REVIEW_INN = "770000000002"
 
 
 @dataclass(frozen=True)
@@ -30,6 +31,10 @@ class FNSResult:
 
 
 def get_fns_result(inn: str, attempt_number: int) -> FNSResult:
+    if inn == DEMO_REVIEW_INN:
+        return FNSResult(
+            "SUCCESS", True, 48, date(2022, 1, 1), "56.10", "2400000.00", "1200000.00"
+        )
     if inn == DEMO_IP_INN:
         return FNSResult(
             "SUCCESS", True, 48, date(2022, 1, 1), "47.11", "6000000.00", "4800000.00"

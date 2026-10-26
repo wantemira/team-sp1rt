@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from app.integrations.fns_mock import CheckStatus, DEMO_IP_INN
+from app.integrations.fns_mock import CheckStatus, DEMO_IP_INN, DEMO_REVIEW_INN
 
 
 @dataclass(frozen=True)
@@ -25,6 +25,9 @@ class BKIResult:
 
 
 def get_bki_result(inn: str) -> BKIResult:
+    if inn == DEMO_REVIEW_INN:
+        return BKIResult("SUCCESS", 0, "0.00", total_payments_12m=24, delayed_payments_12m=6,
+                         active_loans_count=0, credit_limit_total="0.00")
     profiles = {
         DEMO_IP_INN: (0, "43000.00"),
         "7700000001": (0, "50000.00"),

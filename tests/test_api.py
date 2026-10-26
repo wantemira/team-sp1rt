@@ -145,7 +145,7 @@ def test_seed_test_users_is_idempotent_and_accounts_can_login(
     client: TestClient,
 ) -> None:
     with TestSession() as db:
-        assert seed_test_users(db, "local-test-password") == (4, 2)
+        assert seed_test_users(db, "local-test-password") == (len(CLIENT_ACCOUNTS), len(EMPLOYEE_ACCOUNTS))
         assert seed_test_users(db, "local-test-password") == (0, 0)
         db.commit()
 

@@ -15,6 +15,7 @@ CLIENT_ACCOUNTS = (
     ("test.client2@example.com", "7700000002", "Test Client 2"),
     ("test.client3@example.com", "7700000003", "Test Client 3"),
     ("demo.ip@example.com", "770000000001", "ИП Алексей Демонстрационный"),
+    ("demo.review@example.com", "770000000002", "ИП Мария Ручное рассмотрение"),
 )
 EMPLOYEE_ACCOUNTS = (
     ("test.employee1@example.com", "Test Employee 1"),
