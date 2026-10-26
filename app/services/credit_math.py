@@ -8,11 +8,10 @@ from dataclasses import dataclass
 from decimal import Decimal, ROUND_CEILING, ROUND_DOWN, ROUND_HALF_UP
 from math import exp, log10
 
+from app.core.credit_policy import MAX_AMOUNT, MIN_AMOUNT, TARGET_DSCR, TERMS
+
 D = Decimal
 RULES_VERSION = "cash-flow-demo-v1"
-TARGET_DSCR = D("1.35")
-MIN_AMOUNT = D("100000.00")
-MAX_AMOUNT = D("5000000.00")
 WEIGHTS = (15, 25, 20, 15, 10)
 FACTOR_LABELS = (
     ("AGE", "Возраст бизнеса"),
@@ -131,7 +130,7 @@ def price_loan(inputs: CreditInputs, amount: Decimal, months: int) -> PricedLoan
 
 def affordable_loan(inputs: CreditInputs, requested: Decimal, months: int) -> PricedLoan | None:
     """Largest whole-ruble offer satisfying DSCR after rate/payment rounding."""
-    if not requested.is_finite() or not MIN_AMOUNT <= requested <= MAX_AMOUNT or months not in {6, 12, 24}:
+    if not requested.is_finite() or not MIN_AMOUNT <= requested <= MAX_AMOUNT or months not in TERMS:
         raise ValueError("Loan is outside product limits.")
     if inputs.monthly_cash_flow <= 0:
         return None

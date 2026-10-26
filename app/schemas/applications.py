@@ -12,6 +12,8 @@ from pydantic import (
     model_validator,
 )
 
+from app.core.credit_policy import LoanTerm, MAX_AMOUNT, MIN_AMOUNT, TARGET_DSCR
+
 
 def _require_ruble_string(value: object) -> object:
     if value is not None and not isinstance(value, str):
@@ -20,6 +22,7 @@ def _require_ruble_string(value: object) -> object:
 
 
 RubleAmount = Annotated[Decimal, BeforeValidator(_require_ruble_string)]
+Version = Annotated[int, Field(strict=True, ge=1)]
 
 
 class ProductType(StrEnum):
@@ -60,7 +63,7 @@ class QueueStatus(StrEnum):
 
 class ApplicationVersion(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    version: int = Field(ge=1)
+    version: Version
 
 
 class CreditOffer(BaseModel):
@@ -69,9 +72,9 @@ class CreditOffer(BaseModel):
     kind: Literal["ORIGINAL", "COUNTER_OFFER"]
     amount: Decimal = Field(gt=0)
     annual_rate_pct: Decimal = Field(ge=0)
-    term_months: Literal[6, 12, 24]
+    term_months: LoanTerm
     monthly_payment: Decimal = Field(gt=0)
-    dscr: Decimal = Field(ge=Decimal("1.35"))
+    dscr: Decimal = Field(ge=TARGET_DSCR)
     requested_dscr: Decimal
     target_dscr: Decimal
     monthly_cash_flow: Decimal
@@ -82,6 +85,8 @@ class CreditOffer(BaseModel):
 
 # --- 1. Типизированные финансовые данные (ТЗ п.2) ---
 class Financials(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     annual_revenue: RubleAmount | None = Field(
         default=None, ge=0, max_digits=18, decimal_places=2
     )
@@ -91,6 +96,8 @@ class Financials(BaseModel):
 
 
 class BusinessData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     financials: Financials = Field(default_factory=Financials)
 
 
@@ -100,9 +107,9 @@ class ApplicationCreate(BaseModel):
 
     product_type: Literal["term_loan"]
     requested_amount: RubleAmount | None = Field(
-        default=None, ge=100000, le=5000000, max_digits=18, decimal_places=2
+        default=None, ge=MIN_AMOUNT, le=MAX_AMOUNT, max_digits=18, decimal_places=2
     )
-    requested_term_months: Literal[6, 12, 24] | None = Field(default=None)
+    requested_term_months: LoanTerm | None = Field(default=None)
     purpose: str | None = Field(default=None, max_length=500)
     business_data: BusinessData = Field(default_factory=BusinessData)
 
@@ -112,12 +119,12 @@ class EmployeeActionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", json_encoders={Decimal: str})
 
     action: EmployeeAction
-    version: int = Field(ge=1)
+    version: Version
     missing_fields: list[str] | None = Field(default=None)
     
     decision_reason_code: str | None = Field(default=None, max_length=128)
     approved_amount: RubleAmount | None = Field(
-        default=None, ge=100000, max_digits=18, decimal_places=2
+        default=None, ge=MIN_AMOUNT, le=MAX_AMOUNT, max_digits=18, decimal_places=2
     )
     approved_rate: Decimal | None = Field(
         default=None, ge=0, max_digits=8, decimal_places=4
@@ -127,6 +134,14 @@ class EmployeeActionRequest(BaseModel):
     # Строгая валидация действий (ТЗ п.4)
     @model_validator(mode="after")
     def validate_action_payload(self):
+        self.comment = self.comment.strip() if self.comment else None
+        self.decision_reason_code = self.decision_reason_code.strip() if self.decision_reason_code else None
+        if not self.comment:
+            raise ValueError("Добавьте непустой комментарий к решению")
+        if self.action != EmployeeAction.APPROVE and (self.approved_amount is not None or self.approved_rate is not None):
+            raise ValueError("Условия кредита допустимы только для APPROVE")
+        if self.action != EmployeeAction.REQUEST_INFO and self.missing_fields is not None:
+            raise ValueError("missing_fields допустим только для REQUEST_INFO")
         if self.action == EmployeeAction.APPROVE:
             if self.approved_amount is None or not self.comment or not self.comment.strip():
                 raise ValueError("Для APPROVE обязательны approved_amount и comment")
@@ -136,8 +151,8 @@ class EmployeeActionRequest(BaseModel):
                 raise ValueError("Для REJECT обязательны decision_reason_code, comment")
                 
         elif self.action == EmployeeAction.REQUEST_INFO:
-            if not self.missing_fields or not self.comment:
-                raise ValueError("Для REQUEST_INFO обязательны непустой missing_fields и comment")
+            if not self.missing_fields or not self.decision_reason_code:
+                raise ValueError("Для REQUEST_INFO обязательны missing_fields и decision_reason_code")
             
             # Разрешенные запрашиваемые поля MVP
             allowed_fields = {
@@ -251,11 +266,11 @@ class EmployeeApplicationDetail(ApplicationResponse):
 class ApplicationPatch(BaseModel):
     model_config = ConfigDict(extra="forbid", json_encoders={Decimal: str})
 
-    version: int = Field(ge=1)
+    version: Version
     requested_amount: RubleAmount | None = Field(
-        default=None, ge=100000, le=5000000, max_digits=18, decimal_places=2
+        default=None, ge=MIN_AMOUNT, le=MAX_AMOUNT, max_digits=18, decimal_places=2
     )
-    requested_term_months: Literal[6, 12, 24] | None = Field(default=None)
+    requested_term_months: LoanTerm | None = Field(default=None)
     purpose: str | None = Field(default=None, max_length=500)
     business_data: BusinessData = Field(default_factory=BusinessData)
 
@@ -269,7 +284,7 @@ class ApplicationPatch(BaseModel):
 class ApplicationFill(BaseModel):
     model_config = ConfigDict(extra="forbid", json_encoders={Decimal: str})
 
-    version: int = Field(ge=1)
+    version: Version
     business_data: BusinessData
 
     @model_validator(mode="after")

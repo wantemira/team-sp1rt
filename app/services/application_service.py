@@ -1,6 +1,5 @@
 import logging
 from datetime import datetime, timezone
-from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +9,7 @@ from sqlalchemy.orm.exc import StaleDataError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.credit_policy import MAX_AMOUNT, MIN_AMOUNT, TERMS
 from app.models import (
     Application,
     ApplicationCheck,
@@ -218,14 +218,14 @@ def submit_application(
         )
     if (
         application.requested_amount is None
-        or not 100000 <= application.requested_amount <= 5000000
-        or application.requested_term_months not in {6, 12, 24}
+        or not MIN_AMOUNT <= application.requested_amount <= MAX_AMOUNT
+        or application.requested_term_months not in TERMS
     ):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=(
-                "requested_amount must be between 100000 and 5000000, and "
-                "requested_term_months must be 6, 12, or 24."
+                f"Укажите сумму от {MIN_AMOUNT} до {MAX_AMOUNT} рублей "
+                f"и срок из доступных: {', '.join(map(str, TERMS))} мес."
             ),
         )
 
@@ -643,9 +643,9 @@ def employee_decision(
         if (
             application.requested_amount is None
             or decision.approved_amount is None
-            or decision.approved_amount < Decimal("100000.00")
+            or decision.approved_amount < MIN_AMOUNT
             or decision.approved_amount > application.requested_amount
-            or decision.approved_amount > Decimal("5000000.00")
+            or decision.approved_amount > MAX_AMOUNT
         ):
             raise HTTPException(
                 status_code=422,

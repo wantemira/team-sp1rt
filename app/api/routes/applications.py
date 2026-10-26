@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_current_client, get_current_user
 from app.api.versioning import requested_version
+from app.core.credit_policy import MAX_AMOUNT, MIN_AMOUNT, PRODUCT_ID, PRODUCT_NAME, TERMS
 from app.db.session import get_db
 from app.models import User
 from app.schemas.applications import (
@@ -16,18 +17,19 @@ from app.schemas.applications import (
     ApplicationDocumentResponse,
 )
 from app.services import application_service
+from app.schemas.products import ProductResponse
 
 router = APIRouter(tags=["Client"])
 
-@router.get("/products")
-def get_products():
+@router.get("/products", response_model=list[ProductResponse])
+def get_products() -> list[dict]:
     """Единственный продукт MVP (ТЗ п.2)"""
     return [{
-        "id": "term_loan",
-        "name": "Кредит на оборотные средства",
-        "min_amount": "100000.00",
-        "max_amount": "5000000.00",
-        "terms": [6, 12, 24],
+        "id": PRODUCT_ID,
+        "name": PRODUCT_NAME,
+        "min_amount": str(MIN_AMOUNT),
+        "max_amount": str(MAX_AMOUNT),
+        "terms": list(TERMS),
         "disbursement_count": 1,
         "term_type": "fixed",
         "repayment_type": "annuity",
