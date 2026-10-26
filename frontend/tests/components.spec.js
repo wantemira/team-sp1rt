@@ -11,7 +11,7 @@ test('Вкладки доступны с клавиатуры, поля связ
 
 test('Фиктивный пароль не даёт доступ к кабинету', async ({ page }) => {
   await page.goto('/login')
-  await page.getByLabel('Email', { exact: true }).fill('demo.ip@example.com')
+  await page.getByLabel('Электронная почта', { exact: true }).fill('demo.ip@example.com')
   await page.getByLabel('Пароль', { exact: true }).fill('123')
   await page.getByRole('button', { name: 'Войти', exact: true }).click()
   await expect(page.getByRole('alert')).toBeVisible()

@@ -5,6 +5,7 @@ import { PageHeader } from '../../components/layout/AppShell'
 import { Card, Button, InlineAlert, LoadingState, StatusBadge } from '../../components/ui'
 import { ApplicationsTable, FinancingBanner, MetricCard, NewsFeed } from '../../components/credit'
 import { formatMoney } from '../../lib/format'
+import { profileName } from '../../lib/displayText'
 
 export default function ClientDashboard() {
   const { api, client } = useAuth()
@@ -27,7 +28,7 @@ export default function ClientDashboard() {
   const ready = apps.find(item => item.status === 'APPROVED')
   const next = apps.find(item => item.status === 'NEEDS_INFO') || ready || apps[0]
   return <>
-    <PageHeader title="Кредитный кабинет" description={client?.company_name} />
+    <PageHeader title="Кредитный кабинет" description={profileName(client?.company_name)} />
     <FinancingBanner onApply={() => navigate('/client/applications/new')} />
     <div className="metrics-grid">
       <MetricCard label="Активные заявки" value={apps.filter(item => !['DRAFT', 'ISSUED', 'REJECTED'].includes(item.status)).length} />

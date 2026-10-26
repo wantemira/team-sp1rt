@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { createCreditApi } from '../api/creditApi'
 import { Button, InlineAlert, LoadingState } from '../components/ui'
+import { profileName } from '../lib/displayText'
 
 const AuthContext = createContext(null)
 
@@ -52,7 +53,7 @@ export function AuthProvider({ children }) {
   </InlineAlert>
   const user = session ? {
     ...session.user,
-    name: session.client?.company_name || session.employee?.full_name || session.user.email,
+    name: profileName(session.client?.company_name || session.employee?.full_name || session.user.email),
     company_name: session.client?.company_name,
   } : null
   return <AuthContext.Provider value={{ user, client: session?.client, employee: session?.employee, login, logout, api }}>

@@ -31,11 +31,12 @@ export default function LoginPage() {
       <div style={{ width: '100%', maxWidth: 400, padding: 20 }}>
         <Card title="Вход в кредитный кабинет">
           <p className="muted">Демонстрационный ИП: demo.ip@example.com. Пароль указан в настройках запуска стенда.</p>
+          <details><summary>Клиент и сотрудник: какой аккаунт выбрать</summary><p className="muted">demo.review@example.com — клиент, чья заявка передаётся на ручное рассмотрение.</p><p className="muted">test.employee1@example.com и test.employee2@example.com — сотрудники, которые рассматривают заявки.</p></details>
           <form onSubmit={handleSubmit} className="stack" style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '16px' }}>
             {error && <InlineAlert tone="danger">{error}</InlineAlert>}
             
             <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <span>Email</span>
+              <span>Электронная почта</span>
               <input 
                 type="email" 
                 value={email} 

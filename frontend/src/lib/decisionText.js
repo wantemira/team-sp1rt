@@ -13,6 +13,8 @@ const reasons = {
   CURRENT_OVERDUE: 'В кредитной истории есть текущая просрочка.',
   SCORE_BELOW_APPROVAL_THRESHOLD: 'Оценка риска не позволяет предложить этот кредит.',
   SCORE_REQUIRES_MANUAL_REVIEW: 'Заявку рассматривает сотрудник банка.',
+  MISSING_FINANCIALS: 'Уточните запрошенные финансовые показатели.',
+  EMPLOYEE_RISK_DECLINED: 'Сотрудник отказал после проверки данных заявки.',
 }
 export const decisionText = code => reasons[code] || 'Результат рассмотрения сохранён в заявке.'
 
@@ -22,5 +24,9 @@ const events = {
   'Client provided requested financial information.': 'Дополнительные сведения получены.',
   'Employee retried unavailable external checks.': 'Сотрудник повторил внешние проверки.',
   'Demo credit agreement signed and funds issued.': 'Согласие с условиями принято; выдача смоделирована.',
+  'Provide the requested financial information.': 'Заполните запрошенные финансовые показатели.',
 }
-export const historyText = comment => events[comment] || reasons[comment] || comment
+export const commentText = (comment, fallback = 'Комментарий к заявке сохранён.') => events[comment] || reasons[comment] || (
+  typeof comment === 'string' && /[а-яё]/i.test(comment) && !/\b(?:APPROVE|REJECT|REQUEST_INFO|NEEDS_INFO|cash-flow-demo)\b/.test(comment) ? comment : fallback
+)
+export const historyText = comment => commentText(comment, 'Изменение заявки сохранено.')

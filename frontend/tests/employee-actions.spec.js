@@ -28,7 +28,7 @@ async function setup(page, handler) {
     return route.fulfill({ json: url.searchParams.get('status') === current.status ? [current] : [] })
   })
   await page.goto('/login')
-  await page.getByLabel('Email', { exact: true }).fill('test.employee1@example.com')
+  await page.getByLabel('Электронная почта', { exact: true }).fill('test.employee1@example.com')
   await page.getByLabel('Пароль', { exact: true }).fill(password)
   await page.getByRole('button', { name: 'Войти', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Одобрить', exact: true })).toBeVisible()
@@ -55,13 +55,13 @@ for (const action of ['REQUEST_INFO', 'REJECT']) {
     await dialog.getByLabel('Комментарий', { exact: true }).fill('Проверены сведения клиента')
     await dialog.getByRole('button', { name: label, exact: true }).click()
     await expect(dialog.getByRole('alert')).toContainText(action === 'REJECT' ? 'Укажите причину отказа' : 'Выберите хотя бы одно поле')
-    if (action === 'REJECT') await dialog.getByLabel('Код причины отказа').fill('MANUAL_POLICY_REJECT')
+    if (action === 'REJECT') await dialog.getByLabel('Причина отказа').selectOption('EMPLOYEE_RISK_DECLINED')
     else await dialog.getByLabel('Выручка за последние 12 месяцев').check()
     await dialog.getByRole('button', { name: label, exact: true }).click()
     await expect(dialog).not.toBeVisible()
     expect(captured).toMatchObject({ action, version: 3, comment: 'Проверены сведения клиента' })
     expect(captured).toMatchObject(action === 'REJECT'
-      ? { decision_reason_code: 'MANUAL_POLICY_REJECT' }
+      ? { decision_reason_code: 'EMPLOYEE_RISK_DECLINED' }
       : { decision_reason_code: 'MISSING_FINANCIALS', missing_fields: ['business_data.financials.annual_revenue'] })
   })
 }
@@ -118,7 +118,7 @@ test('Конфликт версии с недоступной карточкой
   await page.getByRole('button', { name: 'Отказать', exact: true }).click()
   const dialog = page.getByRole('dialog')
   await dialog.getByLabel('Комментарий', { exact: true }).fill('Проверено')
-  await dialog.getByLabel('Код причины отказа').fill('MANUAL_POLICY_REJECT')
+  await dialog.getByLabel('Причина отказа').selectOption('EMPLOYEE_RISK_DECLINED')
   await dialog.getByRole('button', { name: 'Отказать', exact: true }).click()
   await expect(dialog).not.toBeVisible()
   await expect(page.getByText('Заявка изменилась, но загрузить её текущую версию не удалось. Обновите карточку перед новым действием.')).toBeVisible()

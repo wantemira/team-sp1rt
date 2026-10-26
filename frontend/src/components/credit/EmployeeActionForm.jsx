@@ -33,7 +33,9 @@ export function EmployeeActionForm({ action, application, onSubmit, busy = false
   return <form onSubmit={submit} className="stack stack--compact" aria-busy={busy}>
     {(error || validation) && <InlineAlert tone="danger">{error || validation}</InlineAlert>}
     {action === 'APPROVE' && <><Field label="Одобренная сумма" disabled={busy} inputMode="decimal" value={amount} onChange={event => setAmount(event.target.value)} /><p className="muted">Ставку и допустимый платёж рассчитывает сервер. Срок не меняется.</p></>}
-    {action === 'REJECT' && <Field label="Код причины отказа" disabled={busy} value={reason} onChange={event => setReason(event.target.value)} maxLength={128} />}
+    {action === 'REJECT' && <Field as="select" label="Причина отказа" disabled={busy} value={reason} onChange={event => setReason(event.target.value)}>
+      <option value="">Выберите причину</option><option value="EMPLOYEE_RISK_DECLINED">Повышенный кредитный риск</option><option value="INSUFFICIENT_CASH_FLOW">Недостаточный денежный поток</option><option value="OTHER_REASON">Другая причина — поясните в комментарии</option>
+    </Field>}
     {action === 'REQUEST_INFO' && <fieldset className="checkbox-group" disabled={busy}><legend>Какие сведения запросить</legend>{Object.entries(FINANCIAL_FIELDS).map(([path, label]) => <label key={path}><input type="checkbox" checked={fields.includes(path)} onChange={event => setFields(current => event.target.checked ? [...current, path] : current.filter(item => item !== path))} />{label}</label>)}</fieldset>}
     <Field as="textarea" rows={3} label="Комментарий" disabled={busy} value={comment} onChange={event => setComment(event.target.value)} maxLength={4000} />
     <Button type="submit" loading={busy}>{ACTIONS[action]?.label || 'Подтвердить'}</Button>

@@ -34,7 +34,7 @@ export default function ClientDocuments() {
       const blob = await api.documents.download(doc.applicationId, doc.id)
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
-      link.href = url; link.download = `document-${doc.id}`; link.click()
+      link.href = url; link.download = `Документ-${doc.id}`; link.click()
       URL.revokeObjectURL(url)
     } catch (err) { setError(err.message) }
   }

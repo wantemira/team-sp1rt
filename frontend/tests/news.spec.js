@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test'
 const password = process.env.E2E_PASSWORD || 'password123'
 async function login(page, email) {
   await page.goto('/login')
-  await page.getByLabel('Email', { exact: true }).fill(email)
+  await page.getByLabel('Электронная почта', { exact: true }).fill(email)
   await page.getByLabel('Пароль', { exact: true }).fill(password)
   await page.getByRole('button', { name: 'Войти', exact: true }).click()
   await expect(page).toHaveURL(/\/client$/)
@@ -22,7 +22,7 @@ test('Лента различает ИП и организацию и меняе
   await page.goto('/client')
   const offer = page.locator('.news-feed details').filter({ hasText: 'Почему предложенная сумма меньше запрошенной' })
   await offer.locator('summary').click()
-  await expect(offer).toContainText('DSCR должен быть не ниже 1,35')
+  await expect(offer).toContainText('На рубль кредитных платежей')
   await expect(offer).toContainText('По вашей последней заявке рассчитано встречное предложение.')
   await page.getByRole('button', { name: 'Выйти', exact: true }).click()
   await login(page, 'test.client1@example.com')

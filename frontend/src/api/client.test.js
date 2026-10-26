@@ -58,9 +58,9 @@ test('broken successful response is not treated as a completed operation; non-JS
 test('server policy messages are translated without losing technical code and field details', () => {
   const details = { fields: [{ field: 'body.requested_amount', message: 'Field required' }] }
   const error = new ApiError(422, { message: 'Requested approval does not satisfy the credit policy and DSCR 1.35.', error_code: 'REQUEST_ERROR', details })
-  assert.match(error.message, /DSCR 1,35/)
+  assert.match(error.message, /минимум 1,35/)
   assert.equal(error.code, 'REQUEST_ERROR')
   assert.equal(error.details, details)
   assert.deepEqual(getFieldErrors(error), { requested_amount: 'Заполните поле' })
-  assert.equal(new ApiError(401, { message: 'Invalid email or password.' }).message, 'Неверный email или пароль.')
+  assert.equal(new ApiError(401, { message: 'Invalid email or password.' }).message, 'Неверная электронная почта или пароль.')
 })

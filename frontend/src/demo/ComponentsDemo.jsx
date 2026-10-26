@@ -6,7 +6,7 @@ import { PageHeader } from '../components/layout/AppShell'
 export function ComponentsDemo() {
   const [tab, setTab] = useState('first')
   return <>
-    <PageHeader title="Компоненты интерфейса" description="React + CSS · Все данные и обработчики задаются через props" />
+    <PageHeader title="Компоненты интерфейса" description="Примеры элементов и состояний интерфейса" />
     <div className="gallery-grid">
       <Card title="Кнопки"><div className="row"><Button>Основная</Button><Button variant="secondary">Вторичная</Button><Button variant="ghost">Текстовая</Button><Button variant="danger">Опасное действие</Button><Button loading>Загрузка</Button><Button disabled>Недоступно</Button></div></Card>
       <Card title="Статусы"><div className="row">{Object.keys(APPLICATION_STATUSES).map(status => <StatusBadge key={status} status={status} />)}<Badge>Дополнительная метка</Badge></div></Card>

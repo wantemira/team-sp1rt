@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext'
 import { PageHeader } from '../../components/layout/AppShell'
 import { Button, Card, InlineAlert, LoadingState, StatusBadge } from '../../components/ui'
 import { formatMoney } from '../../lib/format'
+import { profileName } from '../../lib/displayText'
 import EmployeeApplicationDetail from './EmployeeApplicationDetail'
 
 export default function EmployeeApplications() {
@@ -33,7 +34,7 @@ export default function EmployeeApplications() {
           next.set('application', String(item.id))
           return next
         })}>
-          <strong>{item.company_name}</strong><span>{formatMoney(item.requested_amount)} · №{item.id}</span><StatusBadge status={item.status} />
+          <strong>{profileName(item.company_name)}</strong><span>{formatMoney(item.requested_amount)} · №{item.id}</span><StatusBadge status={item.status} />
         </button>
       </li>)}</ul>{!items.length && <p className="muted">В этой категории пока нет заявок.</p>}</Card>
       {selected ? <EmployeeApplicationDetail key={selected.id} id={selected.id} onActionComplete={() => setAttempt(value => value + 1)} /> : <Card>Выберите заявку из списка.</Card>}

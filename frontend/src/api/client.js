@@ -1,6 +1,6 @@
 const translations = {
-  'Invalid email or password.': 'Неверный email или пароль.',
-  'Requested approval does not satisfy the credit policy and DSCR 1.35.': 'Сумма не соответствует кредитной политике и безопасному покрытию платежей (DSCR 1,35). Укажите меньшую сумму.',
+  'Invalid email or password.': 'Неверная электронная почта или пароль.',
+  'Requested approval does not satisfy the credit policy and DSCR 1.35.': 'Сумма превышает безопасную нагрузку. Укажите меньшую сумму: на рубль кредитных платежей требуется минимум 1,35 рубля денежного потока.',
   'The interest rate is calculated by the server.': 'Ставку рассчитывает сервер. Обновите условия предложения.',
   'Uploaded file is empty.': 'Выбранный файл пуст. Загрузите документ с содержимым.',
   'Stored document file not found.': 'Файл документа не найден на сервере.',

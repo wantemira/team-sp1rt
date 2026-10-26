@@ -6,7 +6,7 @@ import { Button, Card, Field, InlineAlert, LoadingState, Modal, StatusBadge } fr
 import { CheckResults, StatusTimeline } from '../../components/credit'
 import { CreditOffer } from '../../components/credit/CreditOffer'
 import { FINANCIAL_FIELDS } from '../../lib/contracts'
-import { decisionText } from '../../lib/decisionText'
+import { commentText, decisionText } from '../../lib/decisionText'
 import { normalizeMoneyInput } from '../../lib/format'
 
 export default function ClientApplicationDetail() {
@@ -56,7 +56,7 @@ export default function ClientApplicationDetail() {
         const financials = {}
         for (const path of app.missing_fields) {
           const value = normalizeMoneyInput(values[path])
-          if (!value) throw new Error(`Заполните поле «${FINANCIAL_FIELDS[path] || path}»`)
+          if (!value) throw new Error(`Заполните поле «${FINANCIAL_FIELDS[path] || 'Финансовый показатель'}»`)
           financials[path.split('.').at(-1)] = value
         }
         update(await api.applications.fill(app.id, { financials }, app.version))
@@ -88,9 +88,9 @@ export default function ClientApplicationDetail() {
       <div className="stack">
         <CreditOffer application={app} />
         {app.next_actions.includes('EDIT') && <Card title="Черновик заявки"><Button onClick={() => navigate(`/client/applications/new?draft=${app.id}`)}>Продолжить заполнение</Button></Card>}
-        {!needsRefresh && app.next_actions.includes('FILL') && <Card title="Требуются дополнительные сведения"><p>{app.info_comment === "Provide the requested financial information." ? "Заполните указанные ниже поля." : app.info_comment}</p>
+        {!needsRefresh && app.next_actions.includes('FILL') && <Card title="Требуются дополнительные сведения"><p>{commentText(app.info_comment, 'Заполните указанные ниже поля.')}</p>
           <form className="stack" onSubmit={event => { event.preventDefault(); perform('FILL') }}>
-            {app.missing_fields.map(path => <Field key={path} label={FINANCIAL_FIELDS[path] || path} inputMode="decimal" value={values[path] || ''} required disabled={busy} onChange={event => setValues(current => ({ ...current, [path]: event.target.value }))} />)}
+            {app.missing_fields.map(path => <Field key={path} label={FINANCIAL_FIELDS[path] || 'Финансовый показатель'} inputMode="decimal" value={values[path] || ''} required disabled={busy} onChange={event => setValues(current => ({ ...current, [path]: event.target.value }))} />)}
             <Button type="submit" loading={busy}>Отправить сведения</Button>
           </form>
         </Card>}

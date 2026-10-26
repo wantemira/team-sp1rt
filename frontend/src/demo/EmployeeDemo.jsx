@@ -13,7 +13,7 @@ export function EmployeeDemo({ historyOnly = false }) {
   const visible = demoQueue.filter(item => filter === 'ALL' || item.status === filter)
   const selected = visible.find(item => item.id === selectedId) || visible[0]
   function handleAction(nextAction) {
-    if (nextAction === 'RETRY_CHECKS') setMessage(`Демонстрация: повтор проверок №${selected.id}, version=${selected.version}. Подключите обработчик API.`)
+    if (nextAction === 'RETRY_CHECKS') setMessage(`Повтор проверки заявки №${selected.id} показан только в галерее.`)
     else setAction(nextAction)
   }
   return <>
@@ -24,7 +24,7 @@ export function EmployeeDemo({ historyOnly = false }) {
       <div className="queue-layout"><ApplicationQueue applications={visible} selectedId={selected?.id} onSelect={id => { setSelectedId(id); setMessage('') }} query={query} onQueryChange={setQuery} /><EmployeeApplicationCard key={selected?.id || 'empty'} application={selected} onAction={handleAction} /></div>
     </>}
     <Modal open={Boolean(action)} onClose={() => setAction(null)} title={ACTIONS[action]?.label || 'Действие сотрудника'}>
-      {action && selected && <EmployeeActionForm key={`${selected.id}-${action}`} action={action} application={{ ...selected, product_type: 'term_loan' }} catalog={{ products: [{ ...PRODUCT, id: 'term_loan' }] }} onSubmit={payload => { setMessage(`Демонстрация: действие ${payload.action}, заявка №${selected.id}, version=${payload.version}. Решение на сервер не отправлено.`); setAction(null) }} />}
+      {action && selected && <EmployeeActionForm key={`${selected.id}-${action}`} action={action} application={{ ...selected, product_type: 'term_loan' }} catalog={{ products: [{ ...PRODUCT, id: 'term_loan' }] }} onSubmit={payload => { setMessage(`Действие «${ACTIONS[payload.action]?.label || "Решение"}» по заявке №${selected.id} показано только в галерее.`); setAction(null) }} />}
       <Button variant="ghost" onClick={() => setAction(null)}>Отмена</Button>
     </Modal>
   </>

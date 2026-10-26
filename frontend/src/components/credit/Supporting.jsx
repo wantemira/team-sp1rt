@@ -2,6 +2,7 @@ import { useId } from 'react'
 import { Card } from '../ui'
 import { formatDate, formatMoney, formatRate } from '../../lib/format'
 import { PRODUCT } from '../../lib/contracts'
+import { documentText } from '../../lib/displayText'
 export function OfferSummary({ amount, term, rate, approved = false }) {
   return <Card title={approved ? 'Одобренные условия' : 'Ваша заявка'} className="offer-summary"><strong>{PRODUCT.name}</strong><div><p className="muted">{approved ? 'Одобренная сумма' : 'Запрашиваемая сумма'}</p><p className="offer-summary__amount">{formatMoney(amount)}</p></div><p>Срок · {term ? `${term} месяцев` : 'Не выбран'}</p>{approved && <strong>{formatRate(rate)}</strong>}<div className="summary-note"><strong>{approved ? 'Следующий шаг — подписание' : 'Индивидуальные условия'}</strong><p className="muted">{approved ? 'Подписание и выдача средств в прототипе смоделированы.' : 'Доступную сумму и ставку покажем после проверки заявки.'}</p></div></Card>
 }
@@ -31,7 +32,7 @@ export function DocumentList({ documents = [], onDownload, onDelete }) {
       {documents.map(document => (
         <li key={document.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', borderBottom: '1px solid #f3f4f6' }}>
           <div>
-            <strong style={{ display: 'block', color: '#111827', marginBottom: '4px' }}>{document.document_type}</strong>
+            <strong style={{ display: 'block', color: '#111827', marginBottom: '4px' }}>{documentText(document.document_type)}</strong>
             <p style={{ margin: '0 0 4px 0', fontSize: '13px', color: '#6b7280' }}>{document.file_name}</p>
             <p style={{ margin: 0, fontSize: '12px', color: '#9ca3af' }}>{formatDate(document.created_at)}</p>
           </div>
@@ -74,7 +75,7 @@ export function DocumentUpload({ onFile, busy = false, error }) {
         <span style={{ fontWeight: '500', color: '#111827', marginBottom: '4px' }}>
           {busy ? 'Загрузка...' : 'Нажмите, чтобы выбрать файл'}
         </span>
-        <span style={{ fontSize: '12px', color: '#6b7280' }}>PDF, PNG или JPEG, до 10 МБ</span>
+        <span style={{ fontSize: '12px', color: '#6b7280' }}>Документ или изображение, до 10 МБ</span>
       </label>
       
       <input 

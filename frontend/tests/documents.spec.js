@@ -4,7 +4,7 @@ const password = process.env.E2E_PASSWORD || 'password123'
 
 test('Документ сохраняется в заявке и скачивается с исходным содержимым', async ({ page }) => {
   await page.goto('/login')
-  await page.getByLabel('Email', { exact: true }).fill('demo.ip@example.com')
+  await page.getByLabel('Электронная почта', { exact: true }).fill('demo.ip@example.com')
   await page.getByLabel('Пароль', { exact: true }).fill(password)
   await page.getByRole('button', { name: 'Войти', exact: true }).click()
   await expect(page).toHaveURL(/\/client$/)

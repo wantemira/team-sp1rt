@@ -3,7 +3,7 @@ const password = process.env.E2E_PASSWORD || 'password123'
 const product = { id: 'term_loan', name: 'Кредит на оборотные средства', min_amount: '250000.00', max_amount: '2000000.50', terms: [12] }
 async function login(page) {
   await page.goto('/login')
-  await page.getByLabel('Email', { exact: true }).fill('demo.ip@example.com')
+  await page.getByLabel('Электронная почта', { exact: true }).fill('demo.ip@example.com')
   await page.getByLabel('Пароль', { exact: true }).fill(password)
   await page.getByRole('button', { name: 'Войти', exact: true }).click()
   await expect(page).toHaveURL(/\/client$/)

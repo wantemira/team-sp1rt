@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 const password = process.env.E2E_PASSWORD || 'password123'
 async function login(page) {
   await page.goto('/login')
-  await page.getByLabel('Email', { exact: true }).fill('demo.ip@example.com')
+  await page.getByLabel('Электронная почта', { exact: true }).fill('demo.ip@example.com')
   await page.getByLabel('Пароль', { exact: true }).fill(password)
   await page.getByRole('button', { name: 'Войти', exact: true }).click()
   await expect(page).toHaveURL(/\/client$/)
@@ -33,7 +33,7 @@ test('Во время настоящей отправки ожидание со�
   checksReady()
   await expect(page).toHaveURL(/\/client\/applications\/\d+$/)
   await expect(page.getByRole('heading', { name: 'Предложение для вашего бизнеса', exact: true })).toBeVisible()
-  await expect(page.getByRole('list', { name: 'Текущие результаты проверок' })).toContainText('Проверка выполнена')
+  await expect(page.getByRole('list', { name: 'Текущие результаты проверок' })).toContainText('Ответ источника получен')
 })
 
 // Граничные сценарии интерфейса с подменёнными версиями ответа API.
