@@ -34,6 +34,17 @@ test('ИП сохраняет черновик, получает counter-offer �
   await page.reload()
   await expect(page.getByText('Предложение принято', { exact: true })).toBeVisible()
   await expect(page.locator('.credit-offer__amount').first()).toContainText('609')
+  const issuedPath = new URL(page.url()).pathname
+  await page.setViewportSize({ width: 390, height: 844 })
+  for (const [path, heading] of [
+    ['/client', 'Кредитный кабинет'], ['/client/products', 'Продукты'],
+    ['/client/applications', 'Мои заявки'], ['/client/applications/new', 'Кредит на оборотные средства'],
+    ['/client/documents', 'Документы'], [issuedPath, /^Заявка №/],
+  ]) {
+    await page.goto(path)
+    await expect(page.getByRole('heading', { name: heading, exact: typeof heading === 'string' })).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), path).toBe(true)
+  }
   expect(errors).toEqual([])
 })
 

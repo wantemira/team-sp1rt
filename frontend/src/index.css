@@ -24,13 +24,6 @@ small { font-size: 12px; }
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }
 
-.dashboard-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
-  margin-top: 24px;
-}
-
 .metric-card {
   background: #ffffff;
   border-radius: 16px;
