@@ -11,7 +11,7 @@ function application() {
     requested_amount: '1000000.00', requested_term_months: 24, status: 'MANUAL_REVIEW', version: 3,
     next_actions: ['APPROVE', 'REJECT', 'REQUEST_INFO'], score: 60, risk_grade: 'C',
     decision_reason_code: 'SCORE_REQUIRES_MANUAL_REVIEW', missing_fields: [],
-    checks: [{ id: 1, check_type: 'FNS', status: 'SUCCESS' }, { id: 2, check_type: 'BKI', status: 'SUCCESS' }],
+    checks: [{ id: 1, check_type: 'FNS', status: 'SUCCESS' }, { id: 2, check_type: 'BKI', status: 'SUCCESS' }, { id: 0, check_type: 'FNS', status: 'TIMEOUT' }],
     scoring_result: { rules_version: 'cash-flow-demo-v1', factors: [] }, status_history: [],
   }
 }
@@ -45,6 +45,9 @@ for (const action of ['REQUEST_INFO', 'REJECT']) {
       return route.fulfill({ json: result })
     })
     const label = action === 'REJECT' ? 'Отказать' : 'Запросить сведения'
+    await expect(page.getByRole('list', { name: 'Текущие результаты проверок' })).not.toContainText('Источник не ответил')
+    await page.getByText('Предыдущие попытки (1)', { exact: true }).click()
+    await expect(page.getByRole('list', { name: 'История попыток проверок' })).toContainText('Источник не ответил')
     await page.getByRole('button', { name: label, exact: true }).click()
     const dialog = page.getByRole('dialog')
     await dialog.getByRole('button', { name: label, exact: true }).click()

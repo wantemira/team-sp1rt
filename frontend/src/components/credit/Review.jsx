@@ -6,6 +6,7 @@ import { formatMoney } from '../../lib/format'
 import { ApplicationActions } from './ApplicationActions'
 import { MetricCard, StatusTimeline } from './Overview'
 import { CreditOffer } from './CreditOffer'
+import { groupChecks } from '../../lib/checks'
 export function ApplicationQueue({ applications = [], selectedId, onSelect, query, onQueryChange }) {
   const visible = applications.filter(item => `${item.company_name} ${item.client?.inn || ''} ${item.id}`.toLowerCase().includes(query.toLowerCase()))
   return <Card className="queue-card"><Field label="Поиск по компании или ИНН" type="search" value={query} onChange={event => onQueryChange(event.target.value)} placeholder="Найти заявку" />
@@ -15,7 +16,11 @@ export function ApplicationQueue({ applications = [], selectedId, onSelect, quer
 }
 export function CheckResults({ checks = [] }) {
   if (!checks.length) return <p className="muted">Проверки еще не выполнены.</p>
-  return <ul className="check-results">{checks.map((check, index) => <li key={check.id ?? index} className={check.status === 'SUCCESS' ? 'check-results__success' : 'check-results__warning'}><span aria-hidden="true">{check.status === 'SUCCESS' ? '✓' : '○'}</span><div><strong>{check.check_type === 'FNS' ? 'Проверка компании · ФНС' : 'Кредитная история · БКИ'}</strong><p>{check.status === 'SUCCESS' ? 'Проверка выполнена' : check.status === 'TIMEOUT' ? 'Источник не ответил — повторите проверку' : 'Ошибка источника — требуется повтор'}</p></div></li>)}</ul>
+  const { current, previous } = groupChecks(checks)
+  return <div className="stack stack--compact"><CheckList checks={current} label="Текущие результаты проверок" />{!!previous.length && <details><summary>Предыдущие попытки ({previous.length})</summary><CheckList checks={previous} label="История попыток проверок" /></details>}</div>
+}
+function CheckList({ checks, label }) {
+  return <ul className="check-results" aria-label={label}>{checks.map((check, index) => <li key={check.id ?? index} className={check.status === 'SUCCESS' ? 'check-results__success' : 'check-results__warning'}><span aria-hidden="true">{check.status === 'SUCCESS' ? '✓' : '○'}</span><div><strong>{check.check_type === 'FNS' ? 'Проверка компании · ФНС' : check.check_type === 'BKI' ? 'Кредитная история · БКИ' : check.check_type}</strong><p>{check.status === 'SUCCESS' ? 'Проверка выполнена' : check.status === 'TIMEOUT' ? 'Источник не ответил' : check.status === 'ERROR' ? 'Ошибка источника' : 'Ожидаем результат'}</p></div></li>)}</ul>
 }
 export function ScoringPanel({ score, grade, factors = [], rulesVersion }) {
   return <div className="stack stack--compact"><div className="review-metrics"><MetricCard label="Скоринг" value={score == null ? '—' : `${score} / 100`} hint="Демонстрационная оценка" /><MetricCard label="Риск-грейд" value={grade || '—'} hint={rulesVersion ? `Версия правил · ${rulesVersion}` : 'Расчет еще не выполнен'} /></div>

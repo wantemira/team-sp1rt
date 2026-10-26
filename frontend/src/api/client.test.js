@@ -28,3 +28,39 @@ test('unauthorized and validation errors retain server details', async () => {
     assert.deepEqual(getFieldErrors({ details: { fields: [{ field: 'body.requested_amount', message: 'Ошибка суммы' }] } }), { requested_amount: 'Ошибка суммы' })
   } finally { globalThis.fetch = original }
 })
+
+test('network failure is readable while aborts keep cancellation semantics', async () => {
+  const original = globalThis.fetch
+  try {
+    globalThis.fetch = async () => { throw new TypeError('Failed to fetch') }
+    await assert.rejects(createApiClient()('/applications'), error => error.code === 'NETWORK_ERROR' && error.status === 0 && error.message.includes('Проверьте подключение'))
+    const abort = new DOMException('Cancelled', 'AbortError')
+    globalThis.fetch = async () => { throw abort }
+    await assert.rejects(createApiClient()('/applications'), error => error === abort)
+  } finally { globalThis.fetch = original }
+})
+
+test('broken successful response is not treated as a completed operation; non-JSON errors retain status', async () => {
+  const original = globalThis.fetch
+  let unauthorized = false
+  const request = createApiClient({ onUnauthorized: () => { unauthorized = true } })
+  try {
+    globalThis.fetch = async () => new Response('<html>gateway error</html>')
+    await assert.rejects(request('/applications'), error => error.code === 'INVALID_RESPONSE')
+    globalThis.fetch = async () => new Response('<html>unauthorized</html>', { status: 401 })
+    await assert.rejects(request('/auth/me'), error => error.status === 401 && /Войдите/.test(error.message))
+    assert.equal(unauthorized, true)
+    globalThis.fetch = async () => new Response('<html>gateway unavailable</html>', { status: 502 })
+    await assert.rejects(request('/products'), error => error.status === 502 && /временно недоступен/.test(error.message))
+  } finally { globalThis.fetch = original }
+})
+
+test('server policy messages are translated without losing technical code and field details', () => {
+  const details = { fields: [{ field: 'body.requested_amount', message: 'Field required' }] }
+  const error = new ApiError(422, { message: 'Requested approval does not satisfy the credit policy and DSCR 1.35.', error_code: 'REQUEST_ERROR', details })
+  assert.match(error.message, /DSCR 1,35/)
+  assert.equal(error.code, 'REQUEST_ERROR')
+  assert.equal(error.details, details)
+  assert.deepEqual(getFieldErrors(error), { requested_amount: 'Заполните поле' })
+  assert.equal(new ApiError(401, { message: 'Invalid email or password.' }).message, 'Неверный email или пароль.')
+})
