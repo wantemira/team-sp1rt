@@ -13,6 +13,7 @@
 | app/api/versioning.py | Строгая версия из JSON; совместимость с legacy query |
 | app/schemas | Pydantic DTO, строки рублей, валидация полей |
 | app/core | Настройки, безопасность, ошибки и политика продукта |
+| app/services/news_service.py | Подбор материалов по профилю и последней заявке клиента |
 | app/services/auth_service.py | Проверка пароля, выпуск JWT, связанный профиль |
 | app/services/application_service.py | Черновики, отправка, дозаполнение, повторы, согласие, ручное решение и файлы |
 | app/services/source_data.py | Проверка и нормализация входных данных источников |

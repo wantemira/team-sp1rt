@@ -82,6 +82,32 @@
           ]
         },
         {
+          "name": "Материалы для ИП",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}"
+              }
+            ],
+            "url": "{{base_url}}/news"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Материалы для ИП\", () => { pm.expect(result[1].id).to.eql(\"profile-individual\"); pm.expect(result[1].body).to.include(\"ЕГРИП\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Условия продукта",
           "request": {
             "method": "GET",
@@ -254,6 +280,32 @@
                   "pm.test(\"Снижена сумма, DSCR безопасен\", () => { pm.expect(result.offer.kind).to.eql(\"COUNTER_OFFER\"); pm.expect(Number(result.offer.amount)).to.be.within(100000,999999); pm.expect(Number(result.offer.dscr)).to.be.at.least(1.35); pm.expect(result.next_actions).to.include(\"SIGN\"); });",
                   "pm.collectionVariables.set(\"offer_id\", result.id);",
                   "pm.collectionVariables.set(\"offer_version\", result.version);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Материал о встречном предложении",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}"
+              }
+            ],
+            "url": "{{base_url}}/news"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Материал о встречном предложении\", () => { pm.expect(result[0].id).to.eql(\"application-counter-offer\"); pm.expect(result[0].relevance).to.include(\"встречное предложение\"); });"
                 ]
               }
             }
@@ -813,6 +865,32 @@
           ]
         },
         {
+          "name": "Материалы для организации",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{info_token}}"
+              }
+            ],
+            "url": "{{base_url}}/news"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Материалы для организации\", () => { pm.expect(result[1].id).to.eql(\"profile-company\"); pm.expect(result[1].body).to.include(\"ЕГРЮЛ\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Создать заявку на 1 млн ₽ / 24 месяца",
           "request": {
             "method": "POST",
@@ -959,6 +1037,32 @@
                   "pm.test(\"Состояние NEEDS_INFO\", () => { pm.expect(result.status).to.eql(\"NEEDS_INFO\"); });",
                   "pm.collectionVariables.set(\"recovery_id\", result.id);",
                   "pm.collectionVariables.set(\"recovery_version\", result.version);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Материал о дозаполнении",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{info_token}}"
+              }
+            ],
+            "url": "{{base_url}}/news"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Материал о дозаполнении\", () => { pm.expect(result[0].id).to.eql(\"application-information\"); pm.expect(result[0].body).to.include(\"финансовые поля\"); });"
                 ]
               }
             }
